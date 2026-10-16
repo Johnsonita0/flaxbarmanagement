@@ -16,4 +16,4 @@ The frontend is configured as an installable PWA with a manifest and a shell-onl
 
 ## Vercel
 
-Create a Vercel project connected to the frontend Git repository and set its Root Directory to `frontend`. Set `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` in Vercel project settings. The API deployment must allow the frontend's production origin through `FRONTEND_ORIGINS`.
+Create a Vercel project connected to the frontend Git repository and set its Root Directory to `frontend`. Set `VITE_SUPABASE_URL`, either `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` in Vercel project settings. The API deployment must allow the frontend's production origin through `FRONTEND_ORIGINS`.
