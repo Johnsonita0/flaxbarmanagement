@@ -12,7 +12,7 @@ The UI is grouped by purpose: screen-level views live in `src/pages/`, reusable 
 
 Only the Supabase publishable/anon key belongs in this browser app. Never put a Supabase service-role key or Cloudflare R2 credentials in `VITE_*` variables.
 
-The frontend is configured as an installable PWA with a manifest and a shell-only service worker. The branded launch splash appears for 10 seconds on every launch, on mobile, tablet, and desktop. Returning authenticated users see a welcome-back message and are taken to their last visited screen; first-time visitors see the workspace preparation message. The service worker does not cache API responses or authentication data. The role confirmation screen displays the role assigned to the signed-in profile; it does not let a user grant themselves a different role.
+The frontend is configured as an installable PWA with a manifest and a shell-only service worker. The branded launch splash appears for 10 seconds on every launch, on mobile, tablet, and desktop. Returning authenticated users see a welcome-back message and are taken to their last visited screen; first-time visitors see the workspace preparation message. User-facing notifications use a shared, dismissible toast system and avoid exposing authentication provider or server details. The service worker does not cache API responses or authentication data. The role confirmation screen displays the role assigned to the signed-in profile; it does not let a user grant themselves a different role.
 
 ## Vercel
 

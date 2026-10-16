@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowLeft, ArrowUpRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import Brand from "../components/Brand";
 import "../css/SignInPage.css";
 
@@ -8,8 +8,6 @@ export type AuthView = "sign-in" | "forgot-password" | "reset-password";
 
 export default function SignInPage({
   view,
-  error,
-  notice,
   supabaseConfigured,
   onSignIn,
   onSendPasswordReset,
@@ -17,8 +15,6 @@ export default function SignInPage({
   onViewChange,
 }: {
   view: AuthView;
-  error: string;
-  notice: string;
   supabaseConfigured: boolean;
   onSignIn: (email: string, password: string) => Promise<void>;
   onSendPasswordReset: (email: string) => Promise<void>;
@@ -97,15 +93,11 @@ export default function SignInPage({
                 <div className="form-row form-row--right">
                   <button className="text-button" type="button" onClick={() => onViewChange("forgot-password")}>Forgot password?</button>
                 </div>
-                {error && <div className="alert alert--error" role="alert">{error}</div>}
-                {notice && <div className="alert alert--success" role="status">{notice}</div>}
                 <button className="button button--primary" type="submit" disabled={!supabaseConfigured || busy}>
-                  {busy ? "Signing in…" : "Sign in"} <ArrowUpRight size={17} />
+                  {busy ? "Signing in…" : "Sign in"}
                 </button>
                 {!supabaseConfigured && (
-                  <p className="setup-note">
-                    Add the Supabase URL and publishable key to <code>frontend/.env</code> to enable sign-in.
-                  </p>
+                  <p className="setup-note">Sign-in is temporarily unavailable. Please contact your administrator.</p>
                 )}
               </form>
             </>
@@ -131,8 +123,6 @@ export default function SignInPage({
                     <input name="email" type="email" autoComplete="email" required placeholder="you@flexbar.com" />
                   </span>
                 </label>
-                {error && <div className="alert alert--error" role="alert">{error}</div>}
-                {notice && <div className="alert alert--success" role="status">{notice}</div>}
                 <button className="button button--primary" type="submit" disabled={!supabaseConfigured || busy}>
                   {busy ? "Sending…" : "Send reset link"}
                 </button>
@@ -167,7 +157,6 @@ export default function SignInPage({
                     <input name="confirmPassword" type="password" autoComplete="new-password" required minLength={8} />
                   </span>
                 </label>
-                {error && <div className="alert alert--error" role="alert">{error}</div>}
                 <button className="button button--primary" type="submit" disabled={!supabaseConfigured || busy}>
                   {busy ? "Updating…" : "Update password"}
                 </button>

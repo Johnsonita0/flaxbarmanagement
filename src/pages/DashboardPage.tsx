@@ -122,16 +122,7 @@ export default function DashboardPage({
         return (
           <ProfilePage
             user={user}
-            onRequestPasswordReset={async (email) => {
-              setActionError("");
-              try {
-                await onRequestPasswordReset(email);
-              } catch (reason) {
-                const message = reason instanceof Error ? reason.message : "Could not request a password reset.";
-                setActionError(message);
-                throw reason;
-              }
-            }}
+            onRequestPasswordReset={onRequestPasswordReset}
           />
         );
       case "Settings": return <SettingsPage />;

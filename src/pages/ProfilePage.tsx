@@ -4,6 +4,7 @@ import type { CurrentUser } from "../lib/api";
 import { roleLabel } from "../lib/roles";
 import PageHeading from "../components/PageHeading";
 import PreviewNotice from "../components/PreviewNotice";
+import { useToast } from "../components/ToastProvider";
 import "./../css/OperationsPages.css";
 
 export default function ProfilePage({
@@ -13,9 +14,26 @@ export default function ProfilePage({
   user: CurrentUser;
   onRequestPasswordReset: (email: string) => Promise<void>;
 }) {
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const { showToast } = useToast();
+  const [resetBusy, setResetBusy] = useState(false);
   const displayName = user.displayName ?? user.email?.split("@")[0] ?? "Flex Bar user";
+
+  async function requestPasswordReset() {
+    if (!user.email) {
+      showToast("No email address is available for this account. Please contact your administrator.", "error");
+      return;
+    }
+
+    setResetBusy(true);
+    try {
+      await onRequestPasswordReset(user.email);
+      showToast("If an account exists for that email, a password reset link has been sent.", "success");
+    } catch {
+      showToast("We couldn't send the reset link. Please try again or contact your administrator.", "error");
+    } finally {
+      setResetBusy(false);
+    }
+  }
 
   return (
     <section className="module-page">
@@ -34,17 +52,10 @@ export default function ProfilePage({
       </div>
       <div className="surface-card settings-list">
         <button className="settings-row"><span className="settings-row__icon"><UserRound size={17} /></span><span><strong>Account information</strong><small>Name and work email</small></span><ChevronRight size={16} /></button>
-        <button className="settings-row" onClick={() => {
-          setMessage("");
-          setError("");
-          if (!user.email) { setError("No email is available for this account."); return; }
-          void onRequestPasswordReset(user.email).then(() => setMessage("If this email belongs to your account, a password reset link has been sent.")).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not request a password reset."));
-        }}><span className="settings-row__icon"><LockKeyhole size={17} /></span><span><strong>Change password</strong><small>Send a secure password reset link</small></span><ChevronRight size={16} /></button>
+        <button className="settings-row" onClick={() => void requestPasswordReset()} disabled={resetBusy}><span className="settings-row__icon"><LockKeyhole size={17} /></span><span><strong>Change password</strong><small>{resetBusy ? "Sending reset link…" : "Send a secure password reset link"}</small></span><ChevronRight size={16} /></button>
         <button className="settings-row"><span className="settings-row__icon"><Bell size={17} /></span><span><strong>Notifications</strong><small>Manage your alerts</small></span><ChevronRight size={16} /></button>
         <button className="settings-row"><span className="settings-row__icon"><ShieldCheck size={17} /></span><span><strong>Security &amp; privacy</strong><small>Account protection</small></span><ChevronRight size={16} /></button>
       </div>
-      {message && <div className="alert alert--success" role="status">{message}</div>}
-      {error && <div className="alert alert--error" role="alert">{error}</div>}
     </section>
   );
 }

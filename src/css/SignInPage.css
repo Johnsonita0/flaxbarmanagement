@@ -27,7 +27,6 @@
 .button--outline { min-height: 42px; border-color: #dce5ee; color: #37506d; background: white; }
 .button--outline:hover { border-color: #9fb8d3; background: #f9fbfd; }
 .setup-note { margin: -4px 0 0; color: #69798d; font-size: 11px; line-height: 1.6; }
-.setup-note code { padding: 2px 4px; border-radius: 4px; background: #f1f4f8; color: #53677f; font-size: 10px; }
 .alert { padding: 11px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
 .alert--error { color: #a8333a; border: 1px solid #f1d2d2; background: #fff6f5; }
 .alert--success { color: #247a4a; border: 1px solid #cce9d7; background: #f3fbf6; }

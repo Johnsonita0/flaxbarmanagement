@@ -26,7 +26,7 @@ function getApiBaseUrl(): string {
     return "http://localhost:3000";
   }
 
-  throw new Error("VITE_API_BASE_URL is not configured for this deployment.");
+  throw new Error("Account services are temporarily unavailable. Please contact your administrator.");
 }
 
 export async function fetchCurrentUser(session: Session): Promise<CurrentUser> {
@@ -38,10 +38,13 @@ export async function fetchCurrentUser(session: Session): Promise<CurrentUser> {
   });
 
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as
-      | { error?: string }
-      | null;
-    throw new Error(body?.error ?? `The API returned an error (${response.status}).`);
+    if (response.status === 401) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+    if (response.status === 403) {
+      throw new Error("Your account is not approved to access this workspace. Please contact your administrator.");
+    }
+    throw new Error("We couldn't load your account details. Please try again or contact your administrator.");
   }
 
   return (await response.json()) as CurrentUser;
