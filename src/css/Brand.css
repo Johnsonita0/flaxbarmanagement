@@ -1,0 +1,7 @@
+.brand { display: flex; align-items: center; flex-direction: column; color: var(--navy); }
+.brand__mark { width: 42px; height: 42px; display: grid; place-items: center; color: #dfa92f; border: 1.5px solid rgba(222, 170, 51, .42); border-radius: 13px; background: #fffaf0; }
+.brand__name { margin-top: 10px; font: 800 20px/1 "Manrope", sans-serif; letter-spacing: .14em; }
+.brand__subtitle { margin-top: 6px; color: #77859a; font-size: 12px; }
+.brand--compact { flex-direction: row; gap: 10px; color: white; }
+.brand--compact .brand__mark { width: 34px; height: 34px; border: 0; border-radius: 10px; color: #e7b745; background: rgba(231, 183, 69, .12); }
+.brand--compact .brand__name { margin: 0; font-size: 14px; letter-spacing: .1em; }

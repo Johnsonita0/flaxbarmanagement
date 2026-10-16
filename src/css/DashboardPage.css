@@ -1,0 +1,56 @@
+.app-shell { min-height: 100vh; min-height: 100dvh; display: flex; background: #f5f7fa; }
+.workspace { min-width: 0; flex: 1; }
+.dashboard-content { width: min(100%, 1350px); min-height: calc(100vh - 68px); display: flex; flex-direction: column; margin: 0 auto; padding: 32px 38px 18px; }
+.dashboard-alert { margin-bottom: 14px; }
+.page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 23px; }
+.page-heading h1, .module-placeholder h1 { margin: 6px 0 5px; color: #142a43; font: 750 25px/1.25 "Manrope", sans-serif; letter-spacing: -.04em; }
+.page-heading > div:first-child > p:last-child { margin: 0; color: #8793a2; font-size: 12px; }
+.date-chip { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #e4eaf0; border-radius: 8px; color: #708096; background: white; font-size: 10px; white-space: nowrap; }
+.welcome-banner { position: relative; min-height: 142px; display: flex; align-items: center; overflow: hidden; padding: 24px 28px; border: 1px solid #153a61; border-radius: 12px; color: white; background: linear-gradient(112deg, #092546 0%, #0d3864 55%, #105393 100%); box-shadow: 0 7px 21px rgba(6, 34, 64, .13); }
+.welcome-banner::after { content: ""; position: absolute; width: 330px; height: 330px; right: 7%; top: -205px; border: 1px solid rgba(255, 255, 255, .1); border-radius: 50%; box-shadow: 0 0 0 29px rgba(255, 255, 255, .035), 0 0 0 59px rgba(255, 255, 255, .025); }
+.welcome-banner__content { position: relative; z-index: 1; }
+.welcome-banner__overline { color: #a8c6e4; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
+.welcome-banner h2 { margin: 8px 0 4px; color: white; font: 700 20px "Manrope", sans-serif; }
+.welcome-banner p { margin: 0; color: #c0d2e5; font-size: 11px; }
+.welcome-banner__role { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: #f2cf78; font-size: 10px; font-weight: 600; }
+.welcome-banner__art { position: absolute; top: 15px; right: 7%; display: grid; width: 115px; height: 115px; place-items: center; transform: rotate(-9deg); color: #edbd53; opacity: .73; }
+.section-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin: 27px 0 14px; }
+.section-heading h2 { margin: 0 0 4px; color: #243a53; font: 700 14px "Manrope", sans-serif; }
+.section-heading p { margin: 0; color: #909cab; font-size: 10px; }
+.section-heading__period { display: flex; align-items: center; gap: 6px; color: #7d8997; font-size: 10px; }
+.module-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.setup-banner { display: flex; align-items: center; gap: 11px; margin-top: 18px; padding: 13px 15px; border: 1px solid #dceee4; border-radius: 9px; background: #f7fcf8; }
+.setup-banner__icon { width: 25px; height: 25px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: #2f8958; background: #e1f2e7; }
+.setup-banner > div { flex: 1; }
+.setup-banner strong { display: block; color: #345c45; font-size: 10px; }
+.setup-banner p { margin: 3px 0 0; color: #7f9486; font-size: 9px; line-height: 1.5; }
+.setup-banner__status { padding: 5px 7px; border-radius: 5px; color: #41835c; background: #e8f5ec; font-size: 8px; font-weight: 700; letter-spacing: .08em; white-space: nowrap; }
+.dashboard-footer { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: auto; padding-top: 25px; color: #9aa5b2; font-size: 9px; }
+.dashboard-footer > span:last-child { display: inline-flex; align-items: center; gap: 5px; }
+.module-placeholder { min-height: 55vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 28px 14px; text-align: center; }
+.placeholder-icon { width: 49px; height: 49px; display: grid; place-items: center; margin-bottom: 17px; border-radius: 14px; color: #1d69ae; background: #e9f3fc; }
+.module-placeholder h1 { margin-top: 8px; }
+.module-placeholder > p:not(.eyebrow) { max-width: 370px; margin: 4px 0 18px; color: #8290a1; font-size: 12px; line-height: 1.6; }
+@media (min-width: 1001px) {
+  .dashboard-content { padding-right: 38px; padding-left: 38px; }
+  .module-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+}
+@media (min-width: 1500px) { .dashboard-content { padding-right: 52px; padding-left: 52px; } .module-grid { gap: 14px; } }
+@media (max-width: 700px) {
+  .dashboard-content { min-height: calc(100vh - 60px); padding: 24px 16px calc(80px + env(safe-area-inset-bottom)); }
+  .page-heading { align-items: flex-start; flex-direction: column; gap: 12px; margin-bottom: 18px; }
+  .page-heading h1 { font-size: 22px; }
+  .date-chip { font-size: 9px; }
+  .welcome-banner { min-height: 133px; padding: 19px; }
+  .welcome-banner__art { right: 1%; transform: scale(.8) rotate(-9deg); }
+  .welcome-banner h2 { font-size: 18px; }
+  .welcome-banner p { max-width: 235px; line-height: 1.5; }
+  .section-heading { align-items: flex-start; margin-top: 22px; }
+  .section-heading p { max-width: 235px; line-height: 1.5; }
+  .module-grid { gap: 8px; }
+  .setup-banner { align-items: flex-start; padding: 11px; }
+  .setup-banner p { font-size: 9px; }
+  .setup-banner__status { display: none; }
+  .dashboard-footer { padding-top: 20px; }
+}
+@media (max-width: 390px) { .module-grid { grid-template-columns: 1fr; } .welcome-banner__art { right: -8%; opacity: .45; } .welcome-banner__content { max-width: 88%; } }

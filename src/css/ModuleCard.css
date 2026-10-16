@@ -1,0 +1,21 @@
+.module-card { min-width: 0; min-height: 77px; display: flex; align-items: center; gap: 11px; padding: 13px; border: 1px solid #e8edf2; border-radius: 10px; text-align: left; background: #fff; box-shadow: 0 2px 5px rgba(24, 46, 70, .025); transition: border-color .15s, box-shadow .15s, transform .15s; }
+.module-card:hover { border-color: #c9d8e8; box-shadow: 0 7px 16px rgba(20, 52, 84, .07); transform: translateY(-1px); }
+.module-card__icon { width: 36px; height: 36px; flex: 0 0 36px; display: grid; place-items: center; border-radius: 9px; }
+.module-card__icon--blue { color: #216eb4; background: #edf5fc; }
+.module-card__icon--green { color: #2e9967; background: #ecf8f1; }
+.module-card__icon--amber { color: #bd8120; background: #fff6e5; }
+.module-card__icon--violet { color: #8163c4; background: #f4f0fc; }
+.module-card__icon--teal { color: #2d928e; background: #eaf7f6; }
+.module-card__icon--rose { color: #c56478; background: #fcf0f2; }
+.module-card__text { min-width: 0; flex: 1; }
+.module-card__text strong { display: block; overflow: hidden; color: #33485f; font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.module-card__text small { display: block; margin-top: 5px; overflow: hidden; color: #94a0ad; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.module-card__arrow { flex: 0 0 auto; color: #a9b4c0; }
+@media (min-width: 1500px) { .module-card { min-height: 85px; } }
+@media (max-width: 700px) {
+  .module-card { min-height: 76px; gap: 8px; padding: 10px 9px; }
+  .module-card__icon { width: 32px; height: 32px; flex-basis: 32px; }
+  .module-card__text strong { font-size: 10px; }
+  .module-card__text small { font-size: 8px; }
+}
+@media (max-width: 390px) { .module-card { min-height: 67px; } }

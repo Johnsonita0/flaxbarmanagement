@@ -1,0 +1,24 @@
+.sidebar { width: 248px; flex: 0 0 248px; display: flex; flex-direction: column; padding: 24px 14px 16px; color: #d3dfed; background: linear-gradient(165deg, #081d37, #0b2b50 84%); }
+.sidebar__brand { padding: 3px 13px 24px; border-bottom: 1px solid rgba(220, 233, 249, .12); }
+.sidebar__workspace { display: block; margin: 15px 0 0 1px; color: #7f9ab8; font-size: 9px; font-weight: 700; letter-spacing: .16em; }
+.sidebar__label { margin: 25px 12px 9px; color: #819ab5; font-size: 9px; font-weight: 700; letter-spacing: .14em; }
+.sidebar__nav { display: flex; flex-direction: column; gap: 4px; }
+.nav-item { width: 100%; min-height: 40px; display: flex; align-items: center; gap: 11px; padding: 0 11px; border: 0; border-radius: 8px; color: #b6c7d9; text-align: left; background: transparent; font-size: 12px; font-weight: 500; transition: color .15s, background .15s; }
+.nav-item:hover { color: white; background: rgba(255, 255, 255, .07); }
+.nav-item--active { color: white; background: #16518a; box-shadow: inset 3px 0 #e4b548; }
+.nav-item--active:hover { background: #195b9b; }
+.nav-item__active-dot { width: 5px; height: 5px; margin-left: auto; border-radius: 50%; background: #e9bd55; }
+.sidebar__bottom { margin-top: auto; }
+.help-card { display: flex; align-items: center; gap: 9px; margin: 0 2px 13px; padding: 11px 9px; border: 1px solid rgba(220, 233, 249, .1); border-radius: 9px; background: rgba(255, 255, 255, .035); }
+.help-card__icon { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 7px; color: #b9d2eb; background: rgba(151, 188, 224, .12); font-weight: 700; }
+.help-card strong, .help-card small { display: block; }
+.help-card strong { color: #e7edf5; font-size: 10px; font-weight: 600; }
+.help-card small { margin-top: 3px; color: #91a6bb; font-size: 9px; }
+.nav-item--logout { border-top: 1px solid rgba(220, 233, 249, .1); border-radius: 0; padding-top: 11px; color: #d0dceb; }
+.sidebar-backdrop { display: none; }
+@media (max-width: 1000px) { .sidebar { width: 218px; flex-basis: 218px; } }
+@media (max-width: 700px) {
+  .sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 270px; transform: translateX(-102%); transition: transform .22s ease; box-shadow: 14px 0 38px rgba(4, 21, 41, .2); }
+  .sidebar--open { transform: translateX(0); }
+  .sidebar-backdrop { position: fixed; z-index: 19; inset: 0; display: block; border: 0; background: rgba(5, 18, 34, .44); }
+}

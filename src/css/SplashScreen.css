@@ -1,0 +1,18 @@
+.splash-screen { position: relative; min-height: 100vh; min-height: 100dvh; display: grid; overflow: hidden; place-items: center; color: white; background: linear-gradient(160deg, #06172d 0%, #09284a 69%, #0c477b 100%); }
+.splash-screen__center { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; margin-top: -18px; animation: splash-arrive .65s ease both; }
+.splash-screen .brand { color: white; }
+.splash-screen .brand__mark { width: 64px; height: 64px; border: 1px solid rgba(230, 180, 65, .35); border-radius: 18px; color: #e6b441; background: rgba(255, 255, 255, .035); }
+.splash-screen .brand__name { margin-top: 19px; font-size: 26px; letter-spacing: .15em; }
+.splash-screen .brand__subtitle { margin-top: 9px; color: #d2dfed; font-size: 13px; }
+.splash-screen__message { min-height: 20px; margin: 22px 15px 0; color: #e3ebf4; font-size: 12px; line-height: 1.55; text-align: center; }
+.splash-screen__tagline { margin: 13px 0 0; color: #afc4dc; font-size: 10px; letter-spacing: .13em; }
+.splash-screen__tagline span { padding: 0 5px; color: #dfb03f; }
+.splash-screen__progress { width: 90px; height: 2px; overflow: hidden; margin-top: 35px; border-radius: 3px; background: rgba(255, 255, 255, .2); }
+.splash-screen__progress i { display: block; width: 100%; height: 100%; border-radius: inherit; background: #e6b441; transform: scaleX(0); transform-origin: left; animation: splash-progress 10s linear forwards; }
+.splash-screen__waves { position: absolute; right: -18%; bottom: -5%; left: -18%; height: 29%; }
+.splash-screen__wave { position: absolute; right: 0; bottom: 0; left: 0; height: 100%; border-radius: 50% 50% 0 0 / 28% 28% 0 0; }
+.splash-screen__wave--back { bottom: 11%; background: rgba(19, 75, 127, .58); transform: rotate(-5deg) translateY(17%); }
+.splash-screen__wave--front { background: linear-gradient(165deg, rgba(20, 93, 153, .7), rgba(10, 49, 89, .94)); transform: rotate(4deg) translateY(23%); }
+@keyframes splash-progress { to { transform: scaleX(1); } }
+@keyframes splash-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .splash-screen__center, .splash-screen__progress i { animation: none; } }
