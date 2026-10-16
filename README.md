@@ -6,7 +6,7 @@ The UI is grouped by purpose: screen-level views live in `src/pages/`, reusable 
 
 ## Local setup
 
-1. Copy `.env.example` to `.env` and set the Supabase anon/publishable key plus the local API URL. The Flex Bar Supabase project URL is already set.
+1. Copy `.env.example` to `.env.local` and set the Supabase publishable key as `VITE_SUPABASE_PUBLISHABLE_KEY` (or use `VITE_SUPABASE_ANON_KEY`) plus the local API URL. The Flex Bar Supabase project URL is already set. Restart Vite after changing environment variables.
 2. From this folder, run `npm install`, then `npm run dev`.
 3. Run `npm run build` to type-check and build the production frontend.
 
