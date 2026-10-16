@@ -9,7 +9,7 @@ const newUserMessages = [
 ];
 
 const returningUserMessages = [
-  "Welcome back — we’re picking up where you left off.",
+  "Welcome back!. Let's pick up from where you left off.",
   "Restoring your last workspace view.",
   "Your Flex Bar workspace is almost ready.",
 ];
