@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import {
   Activity,
   CalendarCheck,
@@ -66,9 +67,21 @@ export default function DashboardSidebar({
   onClose: () => void;
   onSignOut: () => void;
 }) {
+  useEffect(() => {
+    if (!open) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousDocumentOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousDocumentOverflow;
+    };
+  }, [open]);
+
   const sectionsByRole: Record<AppRole, DashboardSection[]> = {
     super_admin: navigation.map(({ label }) => label),
-    management_admin: navigation.map(({ label }) => label),
+    management_admin: navigation.filter(({ label }) => label !== "Settings").map(({ label }) => label),
     department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
     inventory_officer: ["Overview", "Inventory", "Stock Movement", "Tasks", "Reports", "Notifications", "Profile"],
     cash_sales_officer: ["Overview", "Attendance", "Sales", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],

@@ -1,4 +1,5 @@
 .toolbar-row { display: flex; gap: 9px; }
+.settings-time-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .record-row--button { width: 100%; border: 0; border-bottom: 1px solid #eff2f5; text-align: left; background: transparent; cursor: pointer; }
 .record-row--button:last-child { border-bottom: 0; }
 .record-row--button:hover, .conversation-row:hover { background: #f8fafc; }

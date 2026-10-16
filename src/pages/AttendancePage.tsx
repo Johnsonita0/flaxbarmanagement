@@ -17,7 +17,7 @@ interface AttendanceConfig {
 
 interface AttendanceRecord {
   id: string;
-  userId: string;
+  userId: string | null;
   name: string;
   role: string;
   department: string | null;

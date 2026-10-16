@@ -64,11 +64,14 @@ const savedSections: DashboardSection[] = [
   "Settings",
 ];
 
-function readLastSection(userId: string): { section: DashboardSection; error: string } {
+function readLastSection(userId: string, role: CurrentUser["role"]): { section: DashboardSection; error: string } {
   try {
     const saved = window.localStorage.getItem(`flexbar:last-section:${userId}`);
+    const availableSections = role === "super_admin"
+      ? savedSections
+      : savedSections.filter((section) => section !== "Settings");
     return {
-      section: savedSections.find((section) => section === saved) ?? "Overview",
+      section: availableSections.find((section) => section === saved) ?? "Overview",
       error: "",
     };
   } catch {
@@ -80,12 +83,14 @@ export default function DashboardPage({
   user,
   onSignOut,
   onRequestPasswordReset,
+  onUserUpdated,
 }: {
   user: CurrentUser;
   onSignOut: () => void;
   onRequestPasswordReset: (email: string) => Promise<void>;
+  onUserUpdated: (user: CurrentUser) => void;
 }) {
-  const [restoration] = useState(() => readLastSection(user.id));
+  const [restoration] = useState(() => readLastSection(user.id, user.role));
   const [activeSection, setActiveSection] = useState<DashboardSection>(restoration.section);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
@@ -128,6 +133,8 @@ export default function DashboardPage({
           <ProfilePage
             user={user}
             onRequestPasswordReset={onRequestPasswordReset}
+            onUserUpdated={onUserUpdated}
+            onNavigate={navigate}
           />
         );
       case "Settings": return <SettingsPage canManage={user.role === "super_admin"} onManageUsers={() => navigate("Staff")} />;
@@ -150,6 +157,7 @@ export default function DashboardPage({
           section={activeSection}
           name={name}
           role={roleLabel(user.role)}
+          avatarPath={user.avatarPath}
           onToggleMenu={() => setSidebarOpen((open) => !open)}
           onNotifications={() => navigate("Notifications")}
           onProfile={() => navigate("Profile")}

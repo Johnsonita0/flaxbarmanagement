@@ -13,7 +13,14 @@ export interface CurrentUser {
   id: string;
   email: string | null;
   displayName: string | null;
+  avatarPath: string | null;
+  hasLockPin: boolean;
   role: AppRole;
+}
+
+export function getProfilePhotoUrl(avatarPath: string | null): string | null {
+  if (!supabase || !avatarPath) return null;
+  return supabase.storage.from("profile-photos").getPublicUrl(avatarPath).data.publicUrl;
 }
 
 function getApiBaseUrl(): string {
@@ -43,6 +50,7 @@ export interface ManagedUser {
   email: string | null;
   role: AppRole;
   isActive: boolean;
+  isArchived: boolean;
   departmentId: string | null;
   departmentName: string | null;
 }

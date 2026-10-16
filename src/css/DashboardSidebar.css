@@ -18,7 +18,7 @@
 .sidebar-backdrop { display: none; }
 @media (max-width: 1000px) { .sidebar { width: 218px; flex-basis: 218px; } }
 @media (max-width: 700px) {
-  .sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 270px; transform: translateX(-102%); transition: transform .22s ease; box-shadow: 14px 0 38px rgba(4, 21, 41, .2); }
+  .sidebar { position: fixed; z-index: 20; inset: 0 auto 0 0; width: 270px; height: 100vh; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateX(-102%); transition: transform .22s ease; box-shadow: 14px 0 38px rgba(4, 21, 41, .2); }
   .sidebar--open { transform: translateX(0); }
   .sidebar-backdrop { position: fixed; z-index: 19; inset: 0; display: block; border: 0; background: rgba(5, 18, 34, .44); }
 }

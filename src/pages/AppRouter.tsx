@@ -8,6 +8,7 @@ import DashboardPage from "./DashboardPage";
 import RoleSelectionPage from "./RoleSelectionPage";
 import SignInPage from "./SignInPage";
 import SplashScreen from "../components/SplashScreen";
+import LockPinGate from "./LockPinGate";
 
 type AuthView = "sign-in" | "forgot-password" | "reset-password";
 
@@ -42,6 +43,8 @@ export default function AppRouter() {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [authView, setAuthView] = useState<AuthView>("sign-in");
+  const [passwordSetupRequired, setPasswordSetupRequired] = useState(false);
+  const [workspaceLocked, setWorkspaceLocked] = useState(false);
   const [splashComplete, setSplashComplete] = useState(false);
   const [returningUser, setReturningUser] = useState<boolean | undefined>();
   const [authLoading, setAuthLoading] = useState(true);
@@ -71,6 +74,7 @@ export default function AppRouter() {
         setReturningUser(Boolean(nextSession));
         if (event === "PASSWORD_RECOVERY") {
           setAuthView("reset-password");
+          setPasswordSetupRequired(true);
         }
         if (!nextSession) {
           setUser(null);
@@ -85,6 +89,13 @@ export default function AppRouter() {
       if (error) showToast(authFeedback(error, "We couldn't check your sign-in. Please try again."), "error");
       setSession(data.session);
       setReturningUser(Boolean(data.session));
+      if (new URLSearchParams(window.location.search).get("invite") === "1" && data.session) {
+        setPasswordSetupRequired(true);
+        setAuthView("reset-password");
+      }
+      if (new URLSearchParams(window.location.search).has("invite")) {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.hash}`);
+      }
       setAuthLoading(false);
     }).catch(() => {
       if (!mounted) return;
@@ -130,6 +141,23 @@ export default function AppRouter() {
       mounted = false;
     };
   }, [session]);
+
+  useEffect(() => {
+    if (!session || !user || user.role === "super_admin" || !user.hasLockPin || workspaceLocked) return;
+
+    let timer = 0;
+    const scheduleLock = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => setWorkspaceLocked(true), 20 * 60 * 1000);
+    };
+    const activityEvents = ["pointerdown", "keydown", "touchstart", "scroll"] as const;
+    scheduleLock();
+    activityEvents.forEach((event) => window.addEventListener(event, scheduleLock, { passive: true }));
+    return () => {
+      window.clearTimeout(timer);
+      activityEvents.forEach((event) => window.removeEventListener(event, scheduleLock));
+    };
+  }, [session, user, workspaceLocked]);
 
   async function signIn(email: string, password: string) {
     if (!supabase) return;
@@ -180,6 +208,7 @@ export default function AppRouter() {
         return;
       }
       setAuthView("sign-in");
+      setPasswordSetupRequired(false);
       showToast("Your password has been updated. Sign in with your new password.", "success");
     } catch (error: unknown) {
       showToast(authFeedback(error, "We couldn't update your password. Please try again."), "error");
@@ -228,6 +257,41 @@ export default function AppRouter() {
     );
   }
 
+  if (session && user && passwordSetupRequired) {
+    return (
+      <SignInPage
+        view="reset-password"
+        supabaseConfigured={isSupabaseConfigured}
+        onSignIn={signIn}
+        onSendPasswordReset={sendPasswordReset}
+        onUpdatePassword={updatePassword}
+        onViewChange={setAuthView}
+      />
+    );
+  }
+
+  if (session && user && user.role !== "super_admin" && !user.hasLockPin) {
+    return (
+      <LockPinGate
+        mode="setup"
+        onComplete={() => setUser({ ...user, hasLockPin: true })}
+      />
+    );
+  }
+
+  if (session && user && workspaceLocked) {
+    return (
+      <LockPinGate
+        mode="unlock"
+        onComplete={() => setWorkspaceLocked(false)}
+        onResetRequired={() => {
+          setWorkspaceLocked(false);
+          setUser({ ...user, hasLockPin: false });
+        }}
+      />
+    );
+  }
+
   if (session && user && !roleConfirmed) {
     return (
       <RoleSelectionPage
@@ -242,6 +306,7 @@ export default function AppRouter() {
     return (
       <DashboardPage
         user={user}
+        onUserUpdated={setUser}
         onSignOut={() => void signOut()}
         onRequestPasswordReset={requestPasswordReset}
       />

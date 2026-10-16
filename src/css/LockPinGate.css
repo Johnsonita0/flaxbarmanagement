@@ -1,0 +1,16 @@
+.lock-pin-page { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: #f3f6fa; }
+.lock-pin-card { width: min(100%, 420px); padding: 30px; border: 1px solid #e7edf3; border-radius: 18px; background: #fff; box-shadow: 0 18px 50px rgba(22, 48, 76, .09); }
+.lock-pin-card__icon { width: 48px; height: 48px; display: grid; place-items: center; margin-bottom: 18px; border-radius: 14px; color: #1766ad; background: #edf5fc; }
+.lock-pin-card .eyebrow { margin: 0 0 8px; color: #6885a0; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.lock-pin-card h1 { margin: 0; color: #1c334b; font: 750 22px "Manrope", sans-serif; }
+.lock-pin-card__description { margin: 9px 0 20px; color: #718196; font-size: 13px; line-height: 1.6; }
+.lock-pin-form { display: grid; gap: 14px; }
+.lock-pin-form label { display: grid; gap: 7px; color: #536981; font-size: 12px; font-weight: 650; }
+.lock-pin-form input { width: 100%; height: 44px; padding: 0 12px; border: 1px solid #dce5ed; border-radius: 9px; color: #243b53; font: 600 16px "Manrope", sans-serif; letter-spacing: .25em; }
+.lock-pin-form input:focus { border-color: #4288c3; outline: 3px solid rgba(66, 136, 195, .13); }
+.lock-pin-form .button { min-height: 43px; justify-content: center; margin-top: 2px; }
+.lock-pin-form .alert { margin: 0; }
+@media (max-width: 480px) {
+  .lock-pin-page { padding: 16px; }
+  .lock-pin-card { padding: 23px 19px; }
+}

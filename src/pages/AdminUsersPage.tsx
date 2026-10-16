@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { MailPlus, RefreshCw, Save, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { Archive, ChevronDown, KeyRound, MailPlus, RefreshCw, RotateCcw, Save, ShieldCheck, Trash2, UserRoundPlus } from "lucide-react";
 import { adminRequest, assignableRoles } from "../lib/api";
 import type { Department, ManagedUser } from "../lib/api";
 import { roleLabel } from "../lib/roles";
@@ -31,6 +31,8 @@ export default function AdminUsersPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [resettingPasswordId, setResettingPasswordId] = useState("");
+  const [workingUserId, setWorkingUserId] = useState("");
   const [showInvite, setShowInvite] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -40,10 +42,10 @@ export default function AdminUsersPage() {
     setLoadError("");
     try {
       const result = await adminRequest<UserListResponse>("/users");
-      setUsers(result.users);
+      setUsers(result.users.filter((user) => user.id !== primaryAdminId && user.role !== "super_admin"));
       setDepartments(result.departments);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "We couldn't load team accounts.";
+      const message = error instanceof Error ? error.message : "We couldn't load staff accounts.";
       setLoadError(message);
     } finally {
       setLoading(false);
@@ -105,7 +107,7 @@ export default function AdminUsersPage() {
           isActive: values.get("isActive") === "on",
         }),
       });
-      showToast(`Saved access for ${user.displayName || user.email || "team member"}.`, "success");
+      showToast(`Saved access for ${user.displayName || user.email || "staff member"}.`, "success");
       await loadUsers();
     } catch (error: unknown) {
       showToast(error instanceof Error ? error.message : "We couldn't save this account.", "error");
@@ -114,45 +116,80 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function sendPasswordReset(user: ManagedUser) {
+    setResettingPasswordId(user.id);
+    try {
+      const result = await adminRequest<{ message: string }>(`/users/${user.id}/password-reset`, {
+        method: "POST",
+      });
+      showToast(result.message, "success");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "We couldn't send the password reset email.", "error");
+    } finally {
+      setResettingPasswordId("");
+    }
+  }
+
+  async function updateStaffState(user: ManagedUser, action: "archive" | "restore" | "delete" | "lock-pin-reset") {
+    const messages = {
+      archive: `Archive ${user.displayName || user.email || "this staff account"}? They will lose workspace access, but their history will remain.`,
+      restore: `Restore ${user.displayName || user.email || "this staff account"} and re-enable their access?`,
+      delete: `Permanently delete ${user.displayName || user.email || "this archived staff account"}? Their login and profile will be removed, but attendance history will be retained.`,
+      "lock-pin-reset": `Reset ${user.displayName || user.email || "this staff member"}'s lock PIN? They will create a new four-digit PIN after signing in.`,
+    };
+    if (!window.confirm(messages[action])) return;
+
+    setWorkingUserId(user.id);
+    try {
+      const method = action === "delete" ? "DELETE" : "POST";
+      const result = await adminRequest<{ message: string }>(`/users/${user.id}/${action}`, { method });
+      showToast(result.message, "success");
+      await loadUsers();
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "We couldn't update this staff account.", "error");
+    } finally {
+      setWorkingUserId("");
+    }
+  }
+
   return (
     <section className="module-page">
       <PageHeading
-        title="User & role management"
-        description="Invite team members, assign their access, and manage account status."
+        title="Staff & access management"
+        description="Manage staff accounts, assignments, and access. Administrator accounts are kept separate."
         action={{ label: "Invite user", onClick: () => setShowInvite(true) }}
       />
       <div className="admin-callout">
         <ShieldCheck size={18} />
-        <p><strong>Super-admin controls</strong><span>The primary super-admin account is protected. New team members receive an email invitation to set their own password.</span></p>
+        <p><strong>Administrator controls</strong><span>Administrator accounts are not staff records. New staff receive an email invitation to securely set their password.</span></p>
       </div>
       <div className="admin-list-heading">
-        <div><h2>Team accounts</h2><p>{users.length} accounts</p></div>
+        <div><h2>Staff accounts</h2><p>{users.length} accounts</p></div>
         <button className="button button--outline" type="button" onClick={() => void loadUsers()} disabled={loading}><RefreshCw size={15} /> Refresh</button>
       </div>
       {loadError && <div className="alert alert--error" role="alert">{loadError}</div>}
-      {loading ? <p className="admin-empty">Loading team accounts…</p> : (
+      {loading ? <p className="admin-empty">Loading staff accounts…</p> : (
         <div className="admin-user-list">
-          {users.map((user) => {
-            const isPrimaryAdmin = user.id === primaryAdminId;
-            return (
+          {users.map((user) => (
+            <details className="surface-card admin-user-card" key={user.id}>
+              <summary className="admin-user-summary">
+                <span className="initial-avatar">{(user.displayName || user.email || "?").slice(0, 1).toUpperCase()}</span>
+                <span className="admin-user-summary__identity"><strong>{user.displayName || "Name not set"}</strong><small>{user.departmentName || "No department assigned"}</small></span>
+                <span className={`status-pill${user.isArchived || !user.isActive ? " status-pill--warning" : ""}`}>{user.isArchived ? "Archived" : user.isActive ? "Active" : "Access locked"}</span>
+                <ChevronDown className="admin-user-summary__chevron" size={17} />
+              </summary>
               <form
-                className="surface-card admin-user-card"
-                key={user.id}
+                className="admin-user-details"
                 onSubmit={(event) => {
                   event.preventDefault();
                   void saveUser(user, event.currentTarget);
                 }}
               >
-                <div className="admin-user-identity">
-                  <span className="initial-avatar">{(user.displayName || user.email || "?").slice(0, 1).toUpperCase()}</span>
-                  <span><strong>{user.displayName || "Name not set"}{isPrimaryAdmin && <em className="admin-owner-badge">Primary admin</em>}</strong><small>{user.email || "Email unavailable"}</small></span>
-                  <span className={`status-pill${user.isActive ? "" : " status-pill--warning"}`}>{user.isActive ? "Active" : "Inactive"}</span>
-                </div>
+                <div className="admin-user-contact">{user.email || "Email unavailable"} · {roleLabel(user.role)}</div>
                 <div className="admin-user-fields">
                   <label>Role
-                    <select name="role" defaultValue={user.role} disabled={isPrimaryAdmin}>
+                    <select name="role" defaultValue={user.role}>
                       {assignableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
-                      {isPrimaryAdmin && <option value="super_admin">Super Admin</option>}
                     </select>
                   </label>
                   <label>Department
@@ -161,15 +198,37 @@ export default function AdminUsersPage() {
                       {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                     </select>
                   </label>
-                  <label className="admin-active-toggle"><input name="isActive" type="checkbox" defaultChecked={user.isActive} disabled={isPrimaryAdmin} /> Account active</label>
-                  <button className="button button--outline admin-save-button" type="submit" disabled={isPrimaryAdmin || savingId === user.id}>
+                  <label className="admin-active-toggle"><input name="isActive" type="checkbox" defaultChecked={user.isActive} disabled={user.isArchived} /> Account access enabled</label>
+                  <button className="button button--outline admin-save-button" type="submit" disabled={user.isArchived || savingId === user.id}>
                     <Save size={15} />{savingId === user.id ? "Saving…" : "Save access"}
                   </button>
+                  <button className="button button--outline admin-reset-button" type="button" onClick={() => void sendPasswordReset(user)} disabled={user.isArchived || resettingPasswordId === user.id}>
+                    <KeyRound size={15} />{resettingPasswordId === user.id ? "Sending…" : "Send password reset"}
+                  </button>
+                  <div className="admin-user-actions">
+                    <button className="button button--outline" type="button" onClick={() => void updateStaffState(user, "lock-pin-reset")} disabled={workingUserId === user.id}>
+                      <KeyRound size={15} /> Reset lock PIN
+                    </button>
+                    {user.isArchived ? (
+                      <>
+                        <button className="button button--outline" type="button" onClick={() => void updateStaffState(user, "restore")} disabled={workingUserId === user.id}>
+                          <RotateCcw size={15} /> Restore
+                        </button>
+                        <button className="button button--danger" type="button" onClick={() => void updateStaffState(user, "delete")} disabled={workingUserId === user.id}>
+                          <Trash2 size={15} /> Delete permanently
+                        </button>
+                      </>
+                    ) : (
+                      <button className="button button--outline" type="button" onClick={() => void updateStaffState(user, "archive")} disabled={workingUserId === user.id}>
+                        <Archive size={15} /> Archive staff
+                      </button>
+                    )}
+                  </div>
                 </div>
               </form>
-            );
-          })}
-          {users.length === 0 && <p className="admin-empty">No accounts found.</p>}
+            </details>
+          ))}
+          {users.length === 0 && <p className="admin-empty">No staff accounts found.</p>}
         </div>
       )}
       {showInvite && (

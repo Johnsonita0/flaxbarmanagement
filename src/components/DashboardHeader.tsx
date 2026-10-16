@@ -1,10 +1,12 @@
 import { Bell, ChevronDown, Menu, Search } from "lucide-react";
+import { getProfilePhotoUrl } from "../lib/api";
 import "../css/DashboardHeader.css";
 
 export default function DashboardHeader({
   section,
   name,
   role,
+  avatarPath,
   onToggleMenu,
   onNotifications,
   onProfile,
@@ -12,6 +14,7 @@ export default function DashboardHeader({
   section: string;
   name: string;
   role: string;
+  avatarPath: string | null;
   onToggleMenu: () => void;
   onNotifications: () => void;
   onProfile: () => void;
@@ -22,6 +25,7 @@ export default function DashboardHeader({
     .slice(0, 2)
     .map((part) => part[0].toUpperCase())
     .join("");
+  const avatarUrl = getProfilePhotoUrl(avatarPath);
 
   return (
     <header className="topbar">
@@ -32,7 +36,7 @@ export default function DashboardHeader({
         <button className="icon-button notification-button" aria-label="Notifications" onClick={onNotifications}><Bell size={19} /><span /></button>
         <div className="topbar__divider" />
         <button className="account account--button" onClick={onProfile} aria-label={`Open profile for ${name}`}>
-          <span className="account__avatar">{initials || "FB"}</span>
+          <span className="account__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials || "FB"}</span>
           <span className="account__details"><strong>{name}</strong><small>{role}</small></span>
           <ChevronDown size={16} className="account__chevron" />
         </button>
