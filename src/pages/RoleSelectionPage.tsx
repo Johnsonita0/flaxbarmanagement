@@ -13,6 +13,8 @@ export default function RoleSelectionPage({
   onContinue: () => void;
   onSignOut: () => void;
 }) {
+  const isSuperAdmin = user.role === "super_admin";
+
   return (
     <main className="role-page">
       <section className="role-card">
@@ -20,7 +22,11 @@ export default function RoleSelectionPage({
         <div className="role-card__body">
           <p className="eyebrow">YOUR WORKSPACE</p>
           <h1>Continue to Flex Bar</h1>
-          <p className="role-card__intro">Your access is set by your Flex Bar administrator.</p>
+          <p className="role-card__intro">
+            {isSuperAdmin
+              ? "You are the Flex Bar system administrator, with full control of the workspace."
+              : "Your access is set by your Flex Bar administrator."}
+          </p>
           <div className="assigned-role">
             <span className="assigned-role__icon"><UserRound size={19} /></span>
             <span className="assigned-role__details">
@@ -29,7 +35,7 @@ export default function RoleSelectionPage({
             </span>
             <ShieldCheck size={18} className="assigned-role__check" />
           </div>
-          <p className="role-card__secure"><LockKeyhole size={14} /> Your role and permissions cannot be changed here.</p>
+          <p className="role-card__secure"><LockKeyhole size={14} /> {isSuperAdmin ? "Your Super Admin account has full administrator privileges." : "Your role and permissions cannot be changed here."}</p>
           <button className="button button--primary role-card__continue" onClick={onContinue}>
             Continue <ArrowRight size={17} />
           </button>
