@@ -14,6 +14,8 @@ Only the Supabase publishable/anon key belongs in this browser app. Never put a 
 
 The frontend is configured as an installable PWA with a manifest and a shell-only service worker. The branded launch splash appears for 10 seconds on every launch, on mobile, tablet, and desktop. Returning authenticated users see a welcome-back message and are taken to their last visited screen; first-time visitors see the workspace preparation message. User-facing notifications use a shared, dismissible toast system and avoid exposing authentication provider or server details. The service worker does not cache API responses or authentication data. The role confirmation screen displays the role assigned to the signed-in profile; it does not let a user grant themselves a different role.
 
+Super admins can manage team invitations, roles and department assignments from the Staff area and create departments from Departments. The invitation form offers seven starter bar/restaurant assignments. The super-admin can review attendance but does not have a clock-in action; attendance check-in is for staff and management roles.
+
 ## Vercel
 
 Create a Vercel project connected to the frontend Git repository and set its Root Directory to `frontend`. Set `VITE_SUPABASE_URL`, either `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` in Vercel project settings. The API deployment must allow the frontend's production origin through `FRONTEND_ORIGINS`.

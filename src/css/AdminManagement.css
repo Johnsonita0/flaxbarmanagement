@@ -1,0 +1,43 @@
+.admin-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid #d9e9f8;
+  border-radius: 11px;
+  background: #f1f7fd;
+  color: #1766ad;
+}
+
+.admin-callout > svg { flex: 0 0 auto; margin-top: 1px; }
+.admin-callout p { display: grid; gap: 4px; margin: 0; }
+.admin-callout strong { color: #23496d; font-size: 12px; }
+.admin-callout span { color: #647d95; font-size: 11px; line-height: 1.55; }
+.admin-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 22px 0 12px; }
+.admin-list-heading h2 { margin: 0; color: #2f455e; font: 700 15px "Manrope", sans-serif; }
+.admin-list-heading p { margin: 4px 0 0; color: #8794a5; font-size: 10px; }
+.admin-list-heading .button { min-height: 36px; }
+.admin-user-list { display: grid; gap: 11px; margin-top: 12px; }
+.admin-user-card { padding: 15px; }
+.admin-user-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.admin-user-identity > span:nth-child(2) { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.admin-user-identity strong { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; color: #354b62; font-size: 12px; }
+.admin-user-identity small { overflow: hidden; color: #8491a1; font-size: 10px; text-overflow: ellipsis; }
+.admin-owner-badge { padding: 3px 6px; border-radius: 10px; background: #fff5df; color: #9a6a14; font-size: 9px; font-style: normal; }
+.admin-user-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 11px; margin: 14px 0 0 44px; }
+.admin-user-fields > label:not(.admin-active-toggle) { display: grid; gap: 6px; color: #66788c; font-size: 10px; font-weight: 600; }
+.admin-user-fields select, .form-card select { width: 100%; min-width: 0; height: 38px; padding: 0 9px; border: 1px solid #dfe6ed; border-radius: 8px; background: #fff; color: #33485f; font: inherit; font-size: 11px; }
+.admin-active-toggle { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; color: #51677d; font-size: 10px; }
+.admin-active-toggle input { accent-color: #1766ad; }
+.admin-save-button { min-height: 36px; justify-self: end; }
+.admin-form-note { display: flex; align-items: flex-start; gap: 7px; margin: 0; color: #75869a; font-size: 10px; line-height: 1.5; }
+.admin-form-note svg { flex: 0 0 auto; color: #357db8; }
+.admin-empty { margin: 14px 0; padding: 20px; border: 1px dashed #dbe3eb; border-radius: 10px; color: #7b8998; font-size: 12px; text-align: center; }
+.admin-user-fields select:disabled, .admin-active-toggle input:disabled { cursor: not-allowed; opacity: .6; }
+
+@media (max-width: 600px) {
+  .admin-user-card { padding: 12px; }
+  .admin-user-fields { grid-template-columns: minmax(0, 1fr); margin-left: 0; }
+  .admin-save-button { width: 100%; }
+}

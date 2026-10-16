@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import {
   Activity,
   CalendarCheck,
@@ -34,6 +34,8 @@ import StockMovementPage from "./StockMovementPage";
 import StaffHomePage from "./StaffHomePage";
 import TasksPage from "./TasksPage";
 import "../css/DashboardPage.css";
+
+const AdminUsersPage = lazy(() => import("./AdminUsersPage"));
 
 const modules = [
   { section: "Staff", title: "Staff & departments", description: "People and team structure", accent: "blue", icon: UsersRound },
@@ -87,8 +89,11 @@ export default function DashboardPage({
   const [activeSection, setActiveSection] = useState<DashboardSection>(restoration.section);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
-  const name = user.displayName ?? user.email?.split("@")[0] ?? "Flex Bar user";
-  const firstName = user.displayName?.split(" ")[0] ?? "there";
+  const name = user.displayName?.trim() || user.email?.split("@")[0] || "Flex Bar user";
+  const firstName = (user.displayName?.trim() || user.email?.split("@")[0] || "there").split(/\s+/)[0];
+  const firstNameLabel = firstName.charAt(0).toLocaleUpperCase() + firstName.slice(1);
+  const localHour = new Date().getHours();
+  const greeting = localHour < 12 ? "Good morning" : localHour < 17 ? "Good afternoon" : "Good evening";
 
   function navigate(section: DashboardSection) {
     setActiveSection(section);
@@ -106,9 +111,9 @@ export default function DashboardPage({
 
   function renderSection() {
     switch (activeSection) {
-      case "Staff": return <StaffPage onNavigate={navigate} />;
-      case "Attendance": return <AttendancePage />;
-      case "Departments": return <DepartmentsPage />;
+      case "Staff": return user.role === "super_admin" ? <Suspense fallback={<div className="admin-empty">Loading user management…</div>}><AdminUsersPage /></Suspense> : <StaffPage onNavigate={navigate} />;
+      case "Attendance": return <AttendancePage canClockIn={user.role !== "super_admin"} />;
+      case "Departments": return <DepartmentsPage canManage={user.role === "super_admin"} />;
       case "Inventory": return <InventoryPage onMovements={() => navigate("Stock Movement")} />;
       case "Stock Movement": return <StockMovementPage onBack={() => navigate("Inventory")} />;
       case "Sales": return <SalesPage />;
@@ -125,7 +130,7 @@ export default function DashboardPage({
             onRequestPasswordReset={onRequestPasswordReset}
           />
         );
-      case "Settings": return <SettingsPage />;
+      case "Settings": return <SettingsPage canManage={user.role === "super_admin"} onManageUsers={() => navigate("Staff")} />;
       case "Overview": return null;
     }
   }
@@ -156,7 +161,7 @@ export default function DashboardPage({
           ) : activeSection === "Overview" ? (
             <>
               <div className="page-heading">
-                <div><p className="eyebrow">FLEX BAR · OPERATIONS</p><h1>Good day, {firstName}</h1><p>Here’s your workspace at a glance.</p></div>
+                <div><p className="eyebrow">FLEX BAR · OPERATIONS</p><h1>{greeting}, {firstNameLabel}.</h1><p>Here’s your workspace at a glance.</p></div>
                 <div className="date-chip"><CalendarCheck size={16} />{new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(new Date())}</div>
               </div>
               <section className="welcome-banner">

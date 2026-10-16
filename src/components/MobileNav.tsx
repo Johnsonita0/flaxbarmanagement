@@ -23,7 +23,7 @@ const items: Record<DashboardSection, { shortLabel: string; icon: LucideIcon }> 
 };
 
 const mobileSectionsByRole: Record<AppRole, DashboardSection[]> = {
-  super_admin: ["Overview", "Staff", "Inventory", "Tasks", "Reports"],
+  super_admin: ["Overview", "Staff", "Attendance", "Inventory", "Reports"],
   management_admin: ["Overview", "Staff", "Inventory", "Tasks", "Reports"],
   department_supervisor: ["Overview", "Staff", "Attendance", "Tasks", "Reports"],
   inventory_officer: ["Overview", "Inventory", "Stock Movement", "Tasks", "Profile"],

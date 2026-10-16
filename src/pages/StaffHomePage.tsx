@@ -10,11 +10,14 @@ export default function StaffHomePage({
   name: string;
   onNavigate: (section: DashboardSection) => void;
 }) {
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   return (
     <section className="module-page staff-home">
       <div className="staff-home__welcome">
         <p className="eyebrow">YOUR FLEX BAR WORKSPACE</p>
-        <h1>Good day, {name}</h1>
+        <h1>{greeting}, {name}.</h1>
         <p>Here’s what’s happening with your shift.</p>
       </div>
       <PreviewNotice />

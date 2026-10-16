@@ -82,7 +82,7 @@ export default function DashboardSidebar({
       <aside className={`sidebar${open ? " sidebar--open" : ""}`}>
         <div className="sidebar__brand">
           <Brand compact />
-          <span className="sidebar__workspace">STAFF WORKSPACE</span>
+          <span className="sidebar__workspace">{role === "super_admin" ? "ADMIN WORKSPACE" : "STAFF WORKSPACE"}</span>
         </div>
         <div className="sidebar__label">WORKSPACE</div>
         <nav className="sidebar__nav" aria-label="Main navigation">
