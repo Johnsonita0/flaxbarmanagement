@@ -113,9 +113,13 @@ export default function AppRouter() {
       .then((currentUser) => {
         if (mounted) setUser(currentUser);
       })
-      .catch(() => {
+      .catch((reason: unknown) => {
         if (mounted) {
-          setProfileError("We couldn't load your account details. Please try again or contact your administrator.");
+          setProfileError(
+            reason instanceof Error && !(reason instanceof TypeError)
+              ? reason.message
+              : "We couldn't connect to your workspace. Check your connection or contact your administrator.",
+          );
         }
       })
       .finally(() => {

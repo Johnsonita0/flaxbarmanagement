@@ -97,7 +97,7 @@ export default function SignInPage({
                   {busy ? "Signing in…" : "Sign in"}
                 </button>
                 {!supabaseConfigured && (
-                  <p className="setup-note">Sign-in is temporarily unavailable. Please contact your administrator.</p>
+                  <p className="setup-note">Sign-in isn’t available yet. Please ask your administrator to finish setting up this service.</p>
                 )}
               </form>
             </>
