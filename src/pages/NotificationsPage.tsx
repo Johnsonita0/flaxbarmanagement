@@ -2,10 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bell, CircleCheck } from "lucide-react";
 import { apiRequest } from "../lib/api";
 import { useToast } from "../components/ToastProvider";
+import { getNotificationSection } from "../lib/notifications";
+import type { DashboardSection } from "../components/DashboardSidebar";
 import PageHeading from "../components/PageHeading";
 import "./../css/OperationsPages.css";
 
-interface SaleNotification {
+interface WorkspaceNotification {
   id: string;
   type: string;
   title: string;
@@ -29,13 +31,14 @@ function relativeTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
 }
 
-export default function NotificationsPage() {
+export default function NotificationsPage({ onOpenSection }: { onOpenSection: (section: DashboardSection) => void }) {
   const { showToast } = useToast();
   const [filter, setFilter] = useState("All");
-  const [notifications, setNotifications] = useState<SaleNotification[]>([]);
+  const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [openingNotificationId, setOpeningNotificationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [devicePermission, setDevicePermission] = useState<NotificationPermission | null>(
     () => typeof window !== "undefined" && "Notification" in window ? Notification.permission : null,
@@ -43,7 +46,7 @@ export default function NotificationsPage() {
 
   const loadNotifications = useCallback(async () => {
     try {
-      const result = await apiRequest<{ notifications: SaleNotification[]; unreadCount: number }>("/api/v1/sales/notifications");
+      const result = await apiRequest<{ notifications: WorkspaceNotification[]; unreadCount: number }>("/api/v1/sales/notifications");
       setNotifications(result.notifications);
       setUnreadCount(result.unreadCount);
       setError("");
@@ -68,6 +71,26 @@ export default function NotificationsPage() {
   const visibleNotifications = filter === "All"
     ? notifications
     : notifications.filter((notification) => notificationCategory(notification.type) === filter);
+
+  async function openNotification(notification: WorkspaceNotification) {
+    setOpeningNotificationId(notification.id);
+    try {
+      if (!notification.readAt) {
+        await apiRequest(`/api/v1/sales/notifications/${notification.id}/read`, { method: "PATCH" });
+        setNotifications((current) => current.map((item) => item.id === notification.id
+          ? { ...item, readAt: new Date().toISOString() }
+          : item));
+        setUnreadCount((count) => Math.max(0, count - 1));
+        window.dispatchEvent(new Event("flexbar:notification"));
+      }
+      onOpenSection(getNotificationSection(notification.type));
+    } catch (reason: unknown) {
+      showToast(reason instanceof Error ? reason.message : "We couldn't open this notification.", "error");
+    } finally {
+      setOpeningNotificationId(null);
+    }
+  }
+
   async function enableDeviceNotifications() {
     if (!("Notification" in window)) return;
     try {
@@ -122,12 +145,12 @@ export default function NotificationsPage() {
         </div>
       </div>
       <div className="surface-card record-list">
-        {loading ? <p className="empty-state">Loading notifications…</p> : visibleNotifications.map((item) => <div className={`record-row${item.readAt ? "" : " notification-row--unread"}`} key={item.id}>
+        {loading ? <p className="empty-state">Loading notifications…</p> : visibleNotifications.map((item) => <button className={`record-row record-row--button${item.readAt ? "" : " notification-row--unread"}`} key={item.id} type="button" onClick={() => void openNotification(item)} disabled={openingNotificationId !== null}>
           <span className="task-icon task-icon--green"><Bell size={17} /></span>
           <span className="record-row__main"><strong>{item.title}</strong><small>{notificationCategory(item.type)} · {item.detail}</small></span>
-          <span className="record-row__meta">{relativeTime(item.createdAt)}</span>
+          <span className="record-row__meta">{openingNotificationId === item.id ? "Opening…" : relativeTime(item.createdAt)}</span>
           {!item.readAt && <span className="notification-indicator" aria-label="Unread" />}
-        </div>)}
+        </button>)}
         {!loading && visibleNotifications.length === 0 && <p className="empty-state">{notifications.length ? "No notifications match this category." : "You don't have any notifications yet."}</p>}
       </div>
     </section>

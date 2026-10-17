@@ -23,12 +23,17 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/";
+  const data = event.notification.data || {};
+  const targetUrl = data.url || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const appClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
       if (appClient) {
-        appClient.postMessage({ type: "flexbar:open-notifications" });
+        appClient.postMessage({
+          type: "flexbar:open-notification",
+          notificationId: data.notificationId,
+          notificationType: data.notificationType,
+        });
         return appClient.focus();
       }
       return self.clients.openWindow(targetUrl);

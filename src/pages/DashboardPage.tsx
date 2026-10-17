@@ -14,6 +14,7 @@ import {
 import type { CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import { getNotificationSection } from "../lib/notifications";
 import { roleLabel } from "../lib/roles";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebar";
@@ -123,11 +124,18 @@ export default function DashboardPage({
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
-    const handleWorkerMessage = (event: MessageEvent<{ type?: string }>) => {
-      if (event.data?.type !== "flexbar:open-notifications") return;
-      setActiveSection("Notifications");
+    const handleWorkerMessage = (event: MessageEvent<{ type?: string; notificationId?: unknown; notificationType?: unknown }>) => {
+      if (event.data?.type !== "flexbar:open-notification") return;
+      const notificationId = typeof event.data.notificationId === "string" ? event.data.notificationId : null;
+      const notificationType = typeof event.data.notificationType === "string" ? event.data.notificationType : "unknown";
+      setActiveSection(getNotificationSection(notificationType));
       setSidebarOpen(false);
       setActionError("");
+      if (notificationId) {
+        void apiRequest(`/api/v1/sales/notifications/${notificationId}/read`, { method: "PATCH" })
+          .then(() => setUnreadNotifications((count) => Math.max(0, count - 1)))
+          .catch((error: unknown) => console.error("Could not mark the device notification as read.", error));
+      }
     };
     navigator.serviceWorker.addEventListener("message", handleWorkerMessage);
     return () => navigator.serviceWorker.removeEventListener("message", handleWorkerMessage);
@@ -178,7 +186,8 @@ export default function DashboardPage({
       }, (payload) => {
         window.dispatchEvent(new Event("flexbar:notification"));
         if ("Notification" in window && Notification.permission === "granted") {
-          const row = payload.new as { id?: unknown; title?: unknown; detail?: unknown };
+          const row = payload.new as { id?: unknown; type?: unknown; title?: unknown; detail?: unknown };
+          const notificationType = typeof row.type === "string" ? row.type : "unknown";
           const title = typeof row.title === "string" ? row.title : "Flex Bar notification";
           const body = typeof row.detail === "string" ? row.detail : "You have a new workspace update.";
           const tag = typeof row.id === "string" ? `flexbar-notification-${row.id}` : undefined;
@@ -186,7 +195,12 @@ export default function DashboardPage({
             try {
               const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
               if (registration) {
-                await registration.showNotification(title, { body, icon: "/flexbar-icon.svg", tag, data: { url: "/" } });
+                await registration.showNotification(title, {
+                  body,
+                  icon: "/flexbar-icon.svg",
+                  tag,
+                  data: { url: "/", notificationId: row.id, notificationType },
+                });
               } else {
                 new Notification(title, { body, icon: "/flexbar-icon.svg", tag });
               }
@@ -222,7 +236,7 @@ export default function DashboardPage({
       case "Meeting Room": return <MeetingRoomPage user={user} />;
       case "Chat": return <ChatPage user={user} />;
       case "Reports": return <ReportsPage user={user} />;
-      case "Notifications": return <NotificationsPage />;
+      case "Notifications": return <NotificationsPage onOpenSection={navigate} />;
       case "Profile":
         return (
           <ProfilePage
