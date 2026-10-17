@@ -18,6 +18,8 @@ Super admins can register staff accounts with an initial password, manage roles 
 
 Department heads can start instant department meetings or schedule them for later. Administrators can start or schedule meetings for any department. Instant meetings open the live-call screen immediately and remain joinable for up to eight hours; scheduled rooms open 15 minutes before their start time.
 
+Chat supports one-to-one voice and video calls, plus private group calls with up to seven invited colleagues. Incoming calls appear while signed in to the app. Apply the backend `20261018_in_app_calls.sql` migration before using calls; browser microphone and camera permissions are required, and TURN configuration may be needed on restricted networks.
+
 New company owners can register from the standalone `/signup` route. It is intentionally not linked from the existing sign-in screen. Supabase Auth public registration must be enabled with email confirmation, and the company-workspace migration must be applied before enabling it. Registration provisions a company-specific workspace and role-appropriate starter departments.
 
 ## Vercel

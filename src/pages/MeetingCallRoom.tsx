@@ -144,13 +144,13 @@ function LocalVideo({ stream }: { stream: MediaStream | null }) {
   return <video ref={ref} autoPlay muted playsInline className="meeting-video meeting-video--local" />;
 }
 
-function RemoteVideo({ stream, audioStream, name, muted }: { stream: MediaStream | undefined; audioStream?: MediaStream; name: string; muted: boolean }) {
+function RemoteVideo({ stream, audioStream, name, muted, screenSharing }: { stream: MediaStream | undefined; audioStream?: MediaStream; name: string; muted: boolean; screenSharing?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream ?? null;
   }, [stream]);
   return (
-    <div className="meeting-video-tile">
+    <div className={`meeting-video-tile${screenSharing ? " meeting-video-tile--screen" : ""}`}>
       <video ref={ref} autoPlay playsInline muted={muted} />
       <span className="meeting-video-tile__label">{name}<SoundWave stream={audioStream ?? stream} /></span>
     </div>
@@ -163,6 +163,10 @@ function RemoteAudio({ stream }: { stream: MediaStream | undefined }) {
     if (ref.current) ref.current.srcObject = stream ?? null;
   }, [stream]);
   return <audio ref={ref} autoPlay />;
+}
+
+function getVideoSender(connection: RTCPeerConnection) {
+  return connection.getTransceivers().find((transceiver) => transceiver.receiver.track.kind === "video")?.sender;
 }
 
 export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; user: CurrentUser }) {
@@ -178,6 +182,7 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
   const [screenSharing, setScreenSharing] = useState(false);
   const [screenShareBusy, setScreenShareBusy] = useState(false);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+  const [cameraBusy, setCameraBusy] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
@@ -460,6 +465,16 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
   }
 
   async function toggleCamera() {
+    if (cameraBusy) return;
+    setCameraBusy(true);
+    try {
+      await updateCamera();
+    } finally {
+      if (mountedRef.current) setCameraBusy(false);
+    }
+  }
+
+  async function updateCamera() {
     if (!cameraOffRef.current) {
       const local = streamRef.current;
       const cameraTrack = local?.getVideoTracks()[0];
@@ -471,8 +486,7 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
       try {
         if (!screenStreamRef.current) {
           await Promise.all([...peersRef.current.values()].map(async (connection) => {
-            const sender = connection.getSenders().find((item) => item.track?.kind === "video")
-              ?? connection.getTransceivers().find((item) => item.receiver.track.kind === "video")?.sender;
+            const sender = getVideoSender(connection);
             if (sender) await sender.replaceTrack(null);
           }));
         }
@@ -495,18 +509,27 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
         throw new Error("The browser did not provide a camera video track.");
       }
       cameraTrack.onended = () => {
+        if (local?.getTracks().some((track) => track.id === cameraTrack.id)) local.removeTrack(cameraTrack);
         cameraOffRef.current = true;
         if (mountedRef.current) {
           setCameraOff(true);
           setLocalStream(new MediaStream(local?.getTracks() ?? []));
+          void Promise.all([...peersRef.current.values()].map(async (connection) => {
+            const sender = getVideoSender(connection);
+            if (sender) await sender.replaceTrack(null);
+          })).catch((error: unknown) => {
+            console.error("Could not stop the disconnected meeting camera track.", error);
+            if (mountedRef.current) setCallError("Your camera disconnected. Participants may need to reconnect to refresh video.");
+          });
         }
       };
+      const endedTrack = local.getVideoTracks().find((track) => track.readyState !== "live");
+      if (endedTrack) local.removeTrack(endedTrack);
       local.addTrack(cameraTrack);
       setLocalStream(new MediaStream(local.getTracks()));
       if (!screenStreamRef.current) {
         await Promise.all([...peersRef.current.values()].map(async (connection) => {
-          const sender = connection.getSenders().find((item) => item.track?.kind === "video")
-            ?? connection.getTransceivers().find((item) => item.receiver.track.kind === "video")?.sender;
+          const sender = getVideoSender(connection);
           if (sender) await sender.replaceTrack(cameraTrack);
         }));
       }
@@ -541,8 +564,7 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
       : streamRef.current?.getVideoTracks().find((track) => track.readyState === "live") ?? null;
     try {
       await Promise.all([...peersRef.current.values()].map(async (connection) => {
-        const sender = connection.getSenders().find((item) => item.track?.kind === "video")
-          ?? connection.getTransceivers().find((item) => item.receiver.track.kind === "video")?.sender;
+        const sender = getVideoSender(connection);
         if (sender) await sender.replaceTrack(cameraTrack);
       }));
       await updateScreenSharePresence(false);
@@ -567,7 +589,10 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
     setCallError("");
     setScreenShareBusy(true);
     try {
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const display = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15, max: 30 } },
+        audio: false,
+      });
       const track = display.getVideoTracks()[0];
       if (!track) {
         display.getTracks().forEach((item) => item.stop());
@@ -578,8 +603,7 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
       setScreenSharing(true);
       track.onended = () => { void stopScreenShare(); };
       await Promise.all([...peersRef.current.values()].map(async (connection) => {
-        const sender = connection.getSenders().find((item) => item.track?.kind === "video")
-          ?? connection.getTransceivers().find((item) => item.receiver.track.kind === "video")?.sender;
+        const sender = getVideoSender(connection);
         if (sender) await sender.replaceTrack(track);
       }));
       await updateScreenSharePresence(true);
@@ -593,6 +617,11 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
     }
   }
 
+  const canShareScreen = Boolean(
+    window.isSecureContext
+    && navigator.mediaDevices
+    && typeof navigator.mediaDevices.getDisplayMedia === "function",
+  );
   const isAdmin = user.role === "super_admin" || user.role === "management_admin";
 
   return (
@@ -614,13 +643,13 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
           {callError && <div className="alert alert--error" role="alert">{callError}</div>}
           <div className="meeting-call__grid">
             {screenStream || !cameraOff
-              ? <div className="meeting-video-tile meeting-video-tile--local"><LocalVideo stream={screenStream ?? localStream} /><span className="meeting-video-tile__label">You{screenSharing ? " · Sharing screen" : ""}<SoundWave stream={localStream} /></span></div>
+              ? <div className={`meeting-video-tile meeting-video-tile--local${screenSharing ? " meeting-video-tile--screen" : ""}`}><LocalVideo stream={screenStream ?? localStream} /><span className="meeting-video-tile__label">You{screenSharing ? " · Sharing screen" : ""}<SoundWave stream={localStream} /></span></div>
               : <AudioParticipantTile name={`You${isAdmin ? " · Administrator" : ""}`} role={user.role} avatarPath={user.avatarPath} stream={localStream ?? undefined} />}
             {participants.map((participant) => {
               const remote = remoteStreams[participant.userId];
               const hasVideo = Boolean(remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted));
               return hasVideo
-                ? <RemoteVideo key={participant.userId} name={`${participant.name}${participant.screenSharing ? " · Sharing screen" : participant.role === "super_admin" || participant.role === "management_admin" ? " · Administrator" : ""}`} stream={remote} audioStream={remote} muted={false} />
+                ? <RemoteVideo key={participant.userId} name={`${participant.name}${participant.screenSharing ? " · Sharing screen" : participant.role === "super_admin" || participant.role === "management_admin" ? " · Administrator" : ""}`} stream={remote} audioStream={remote} muted={false} screenSharing={participant.screenSharing} />
                 : <AudioParticipantTile key={participant.userId} name={participant.name} role={participant.role} avatarPath={participant.avatarPath} stream={remote} />;
             })}
             {!participants.length && <p className="meeting-call__waiting">You’re in the room. Waiting for others to join…</p>}
@@ -628,10 +657,11 @@ export default function MeetingCallRoom({ meeting, user }: { meeting: Meeting; u
           {turnConfigured === false && <p className="meeting-call__notice">Some restricted networks need administrator-configured TURN relay service for video and screen sharing.</p>}
           <div className="meeting-call__controls">
             <button className={`button ${muted ? "button--outline" : "button--primary"}`} type="button" onClick={toggleMicrophone}><span aria-hidden="true">{muted ? <MicOff size={16} /> : <Mic size={16} />}</span>{muted ? "Unmute" : "Mute"}</button>
-            <button className={`button ${cameraOff ? "button--outline" : "button--primary"}`} type="button" onClick={() => void toggleCamera()}><span aria-hidden="true">{cameraOff ? <VideoOff size={16} /> : <Video size={16} />}</span>{cameraOff ? "Start camera" : "Stop camera"}</button>
-            <button className={`button ${screenSharing ? "button--primary" : "button--outline"}`} type="button" onClick={() => void toggleScreenShare()} disabled={screenShareBusy}><span aria-hidden="true">{screenSharing ? <ScreenShareOff size={16} /> : <ScreenShare size={16} />}</span>{screenShareBusy ? "Updating…" : screenSharing ? "Stop sharing" : "Share screen"}</button>
+            <button className={`button ${cameraOff ? "button--outline" : "button--primary"}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy}><span aria-hidden="true">{cameraOff ? <VideoOff size={16} /> : <Video size={16} />}</span>{cameraBusy ? "Updating…" : cameraOff ? "Start camera" : "Stop camera"}</button>
+            <button className={`button ${screenSharing ? "button--primary" : "button--outline"}`} type="button" onClick={() => void toggleScreenShare()} disabled={screenShareBusy || !canShareScreen} title={!canShareScreen ? "Screen capture is unavailable in this browser or device." : undefined}><span aria-hidden="true">{screenSharing ? <ScreenShareOff size={16} /> : <ScreenShare size={16} />}</span>{screenShareBusy ? "Updating…" : screenSharing ? "Stop sharing" : "Share screen"}</button>
             <button className="button button--danger" type="button" onClick={closeCall}><PhoneOff size={16} /> Leave call</button>
           </div>
+          {!canShareScreen && <p className="meeting-call__notice">This browser or device does not provide screen capture. Try a desktop browser with screen-sharing support over HTTPS. Some mobile browsers do not support sharing the screen.</p>}
         </>
       )}
       {callError && !inCall && <div className="alert alert--error" role="alert">{callError}</div>}

@@ -10,6 +10,7 @@ import SignInPage from "./SignInPage";
 import SplashScreen from "../components/SplashScreen";
 import LockPinGate from "./LockPinGate";
 import CompanySignupPage from "./CompanySignupPage";
+import { InAppCallsProvider } from "../components/InAppCalls";
 
 type AuthView = "sign-in" | "forgot-password" | "reset-password";
 
@@ -342,12 +343,14 @@ export default function AppRouter() {
 
   if (session && user) {
     return (
-      <DashboardPage
-        user={user}
-        onUserUpdated={setUser}
-        onSignOut={() => void signOut()}
-        onRequestPasswordReset={requestPasswordReset}
-      />
+      <InAppCallsProvider user={user}>
+        <DashboardPage
+          user={user}
+          onUserUpdated={setUser}
+          onSignOut={() => void signOut()}
+          onRequestPasswordReset={requestPasswordReset}
+        />
+      </InAppCallsProvider>
     );
   }
 

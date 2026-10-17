@@ -1,0 +1,50 @@
+.call-overlay {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(9, 23, 39, .68);
+}
+.call-window {
+  width: min(900px, 100%);
+  max-height: min(90vh, 760px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  overflow-y: auto;
+  border: 1px solid #e4ebf2;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 80px rgba(8, 24, 42, .25);
+}
+.call-window__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.call-window__header strong, .call-window__header small { display: block; }
+.call-window__header strong { color: #263c53; font-size: 15px; }
+.call-window__header small { margin-top: 4px; color: #8190a0; font-size: 11px; }
+.call-window__tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; min-height: 220px; }
+.call-tile { position: relative; min-height: 210px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; overflow: hidden; border-radius: 12px; color: #fff; background: #152b42; }
+.call-tile video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.call-tile audio { display: none; }
+.call-tile strong { position: absolute; bottom: 10px; left: 11px; max-width: calc(100% - 22px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 5px 8px; border-radius: 6px; font-size: 11px; background: rgba(8, 22, 38, .75); }
+.call-tile__avatar, .call-incoming__avatar { width: 64px; height: 64px; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.7); border-radius: 50%; color: white; background: #2877b7; font-size: 21px; font-weight: 700; }
+.call-window__waiting { grid-column: 1 / -1; align-self: center; justify-self: center; color: #718196; font-size: 12px; }
+.call-window__controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px; }
+.call-window__controls .button { min-height: 42px; }
+.call-window__controls .button--danger { color: #fff; background: #c83f46; }
+.call-incoming { position: fixed; z-index: 1300; right: 22px; bottom: 22px; width: min(340px, calc(100vw - 32px)); display: flex; align-items: center; flex-direction: column; gap: 9px; padding: 20px; border: 1px solid #e1e9f0; border-radius: 16px; background: #fff; box-shadow: 0 14px 45px rgba(14, 32, 50, .24); }
+.call-incoming__avatar { width: 54px; height: 54px; font-size: 18px; }
+.call-incoming > strong { color: #293f55; font-size: 14px; }
+.call-incoming > span { color: #7b8a9a; font-size: 11px; }
+.call-incoming__actions { display: flex; gap: 9px; margin-top: 5px; }
+.call-incoming__actions .button { min-height: 38px; }
+.call-toast { position: fixed; z-index: 1400; right: 18px; bottom: 18px; max-width: min(430px, calc(100vw - 36px)); display: flex; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid #efcaca; border-radius: 9px; color: #8b3438; background: #fff5f4; box-shadow: 0 8px 28px rgba(14, 32, 50, .16); font-size: 11px; }
+.call-toast button { border: 0; color: inherit; background: transparent; font-size: 20px; cursor: pointer; }
+@media (max-width: 540px) {
+  .call-overlay { padding: 0; }
+  .call-window { width: 100%; height: 100%; max-height: none; padding: 14px; border-radius: 0; }
+  .call-window__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .call-tile { min-height: 160px; }
+}
