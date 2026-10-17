@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   Activity,
   CalendarCheck,
@@ -18,6 +18,7 @@ import { getNotificationSection } from "../lib/notifications";
 import { roleLabel } from "../lib/roles";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebar";
+import { PageNavigationContext } from "../components/PageNavigationContext";
 import { useToast } from "../components/ToastProvider";
 import type { DashboardSection } from "../components/DashboardSidebar";
 import MobileNav from "../components/MobileNav";
@@ -101,6 +102,8 @@ export default function DashboardPage({
   const { showToast } = useToast();
   const [restoration] = useState(() => readLastSection(user.id, user.role));
   const [activeSection, setActiveSection] = useState<DashboardSection>(restoration.section);
+  const activeSectionRef = useRef(activeSection);
+  const sectionHistory = useRef<DashboardSection[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -113,7 +116,17 @@ export default function DashboardPage({
   const greeting = localHour < 12 ? "Good morning" : localHour < 17 ? "Good afternoon" : "Good evening";
 
   function navigate(section: DashboardSection) {
+    if (section !== activeSectionRef.current) sectionHistory.current.push(activeSectionRef.current);
+    activeSectionRef.current = section;
     setActiveSection(section);
+    setSidebarOpen(false);
+    setActionError("");
+  }
+
+  function goBack() {
+    const previousSection = sectionHistory.current.pop() ?? "Overview";
+    activeSectionRef.current = previousSection;
+    setActiveSection(previousSection);
     setSidebarOpen(false);
     setActionError("");
   }
@@ -142,9 +155,7 @@ export default function DashboardPage({
       if (event.data?.type !== "flexbar:open-notification") return;
       const notificationId = typeof event.data.notificationId === "string" ? event.data.notificationId : null;
       const notificationType = typeof event.data.notificationType === "string" ? event.data.notificationType : "unknown";
-      setActiveSection(getNotificationSection(notificationType));
-      setSidebarOpen(false);
-      setActionError("");
+      navigate(getNotificationSection(notificationType));
       if (notificationId) {
         void apiRequest(`/api/v1/sales/notifications/${notificationId}/read`, { method: "PATCH" })
           .then(() => window.dispatchEvent(new Event("flexbar:notification-read")))
@@ -173,7 +184,9 @@ export default function DashboardPage({
 
   useEffect(() => {
     if (departmentAccessLoaded && !isDepartmentHead && activeSection === "Department Hub") {
-      navigate("Overview");
+      sectionHistory.current.length = 0;
+      activeSectionRef.current = "Overview";
+      setActiveSection("Overview");
     }
   }, [activeSection, departmentAccessLoaded, isDepartmentHead]);
 
@@ -302,34 +315,36 @@ export default function DashboardPage({
         />
         <main className="dashboard-content">
           {actionError && <div className="alert alert--error dashboard-alert" role="alert">{actionError}</div>}
-          {activeSection === "Overview" && user.role === "staff" ? (
-            <StaffHomePage name={firstName} userId={user.id} salesEnabled={user.salesEnabled} onNavigate={navigate} />
-          ) : activeSection === "Overview" ? (
-            <>
-              <div className="page-heading">
-                <div><p className="eyebrow">FLEX BAR · OPERATIONS</p><h1>{greeting}, {firstNameLabel}.</h1><p>Here’s your workspace at a glance.</p></div>
-                <div className="date-chip"><CalendarCheck size={16} />{new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(new Date())}</div>
-              </div>
-              <section className="welcome-banner">
-                <div className="welcome-banner__content">
-                  <span className="welcome-banner__overline">YOUR WORKSPACE</span>
-                  <h2>Welcome to {user.companyName}</h2>
-                  <p>Your people and daily operations, together in one place.</p>
-                  <span className="welcome-banner__role"><ShieldCheck size={14} />{roleLabel(user.role)}</span>
+          <PageNavigationContext.Provider value={goBack}>
+            {activeSection === "Overview" && user.role === "staff" ? (
+              <StaffHomePage name={firstName} userId={user.id} salesEnabled={user.salesEnabled} onNavigate={navigate} />
+            ) : activeSection === "Overview" ? (
+              <>
+                <div className="page-heading">
+                  <div><p className="eyebrow">FLEX BAR · OPERATIONS</p><h1>{greeting}, {firstNameLabel}.</h1><p>Here’s your workspace at a glance.</p></div>
+                  <div className="date-chip"><CalendarCheck size={16} />{new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(new Date())}</div>
                 </div>
-                <div className="welcome-banner__art" aria-hidden="true"><Wine size={102} strokeWidth={1} /></div>
-              </section>
-              <div className="section-heading">
-                <div><h2>Operations overview</h2><p>Quick access to your team and daily workflows.</p></div>
-                <span className="section-heading__period"><Activity size={15} /> TODAY</span>
-              </div>
-              <section className="module-grid" aria-label="Operations modules">
-                {modules.map((module) => (
-                  <ModuleCard key={module.section} title={module.title} description={module.description} accent={module.accent} icon={module.icon} onClick={() => navigate(module.section)} />
-                ))}
-              </section>
-            </>
-          ) : renderSection()}
+                <section className="welcome-banner">
+                  <div className="welcome-banner__content">
+                    <span className="welcome-banner__overline">YOUR WORKSPACE</span>
+                    <h2>Welcome to {user.companyName}</h2>
+                    <p>Your people and daily operations, together in one place.</p>
+                    <span className="welcome-banner__role"><ShieldCheck size={14} />{roleLabel(user.role)}</span>
+                  </div>
+                  <div className="welcome-banner__art" aria-hidden="true"><Wine size={102} strokeWidth={1} /></div>
+                </section>
+                <div className="section-heading">
+                  <div><h2>Operations overview</h2><p>Quick access to your team and daily workflows.</p></div>
+                  <span className="section-heading__period"><Activity size={15} /> TODAY</span>
+                </div>
+                <section className="module-grid" aria-label="Operations modules">
+                  {modules.map((module) => (
+                    <ModuleCard key={module.section} title={module.title} description={module.description} accent={module.accent} icon={module.icon} onClick={() => navigate(module.section)} />
+                  ))}
+                </section>
+              </>
+            ) : renderSection()}
+          </PageNavigationContext.Provider>
           <footer className="dashboard-footer">
             <span>Flex Bar · Staff &amp; Business Management</span>
             <span><LockKeyhole size={13} /> Secure workspace</span>

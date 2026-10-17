@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { CurrentUser } from "../lib/api";
-import { fetchCurrentUser } from "../lib/api";
+import { apiRequest, fetchCurrentUser } from "../lib/api";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useToast } from "../components/ToastProvider";
 import DashboardPage from "./DashboardPage";
@@ -85,6 +85,9 @@ export default function AppRouter() {
         if (event === "PASSWORD_RECOVERY") {
           setAuthView("reset-password");
           setPasswordSetupRequired(true);
+        }
+        if (event === "SIGNED_OUT") {
+          window.history.replaceState(null, "", "/");
         }
         if (!nextSession) {
           setUser(null);
@@ -241,6 +244,9 @@ export default function AppRouter() {
         showToast(authFeedback(error, "We couldn't update your password. Please try again."), "error");
         return;
       }
+      void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
+        console.error("Could not end in-app call sessions before password-reset sign-out.", callError);
+      });
       const { error: signOutError } = await supabase.auth.signOut();
       if (signOutError) {
         showToast(authFeedback(signOutError, "Your password was updated, but we couldn't end this session."), "error");
@@ -257,6 +263,9 @@ export default function AppRouter() {
   async function signOut() {
     if (!supabase) return;
     try {
+      void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
+        console.error("Could not end in-app call sessions before sign-out.", callError);
+      });
       const { error } = await supabase.auth.signOut();
       if (error) showToast(authFeedback(error, "We couldn't sign you out. Please try again."), "error");
     } catch (error: unknown) {

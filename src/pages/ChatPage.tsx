@@ -448,7 +448,6 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 {!messagesLoading && !messages.length && <p className="empty-state">This is the start of your conversation with {activeConversation.peer.name}.</p>}
                 {messages.map((message) => (
                   <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                    {!message.fromMe && <div className="chat-bubble__sender"><ChatAvatar name={message.senderName} avatarPath={message.senderAvatarPath} /><small>{message.senderName}</small></div>}
                     <p>{message.body}</p>
                     <div className="chat-bubble__meta">
                       <time>{formatTime(message.createdAt)}</time>

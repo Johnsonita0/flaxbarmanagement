@@ -376,27 +376,22 @@ function CallRoom({
     if (finishingRef.current) return;
     finishingRef.current = true;
     try {
-      const isCaller = details?.call.isCaller
-        ?? (await apiRequest<CallRoomDetails>(`/api/v1/calls/${callId}`)).call.isCaller;
-      if (isCaller && channelRef.current) {
-        try {
-          const result = await channelRef.current.send({
-            type: "broadcast",
-            event: "call-ended",
-            payload: { callId },
-          });
+      if (details?.call.isCaller && channelRef.current) {
+        void channelRef.current.send({
+          type: "broadcast",
+          event: "call-ended",
+          payload: { callId },
+        }).then((result) => {
           if (result !== "ok") console.error("Could not notify call participants that the call ended.", result);
-        } catch (broadcastError: unknown) {
-          console.error("Could not broadcast call end; ending the call through the API instead.", broadcastError);
-        }
+        }).catch((broadcastError: unknown) => {
+          console.error("Could not broadcast call end.", broadcastError);
+        });
       }
-      await apiRequest(`/api/v1/calls/${callId}/${isCaller ? "end" : "leave"}`, { method: "PATCH" });
       closeResources();
       onClose();
-    } catch (leaveError: unknown) {
-      console.error("Could not update in-app call status.", leaveError);
-      setError(leaveError instanceof Error ? leaveError.message : "Call status could not be updated.");
-      throw leaveError;
+      void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
+        console.error("Could not end in-app call sessions while leaving the call.", callError);
+      });
     } finally {
       finishingRef.current = false;
     }
@@ -458,15 +453,14 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
   }, []);
 
   const endActiveCall = useCallback(async () => {
-    if (!activeCallId) return;
-    if (finishCallRef.current) {
+    if (activeCallId && finishCallRef.current) {
       await finishCallRef.current();
       return;
     }
-
-    const details = await apiRequest<CallRoomDetails>(`/api/v1/calls/${activeCallId}`);
-    await apiRequest(`/api/v1/calls/${activeCallId}/${details.call.isCaller ? "end" : "leave"}`, { method: "PATCH" });
-    setActiveCallId(null);
+    if (activeCallId) setActiveCallId(null);
+    void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
+      console.error("Could not end in-app call sessions while signing out.", callError);
+    });
   }, [activeCallId]);
 
   const startCall = useCallback(async (participantIds: string[], mediaMode: MediaMode) => {

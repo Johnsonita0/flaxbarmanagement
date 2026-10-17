@@ -1,5 +1,8 @@
 .module-page { display: flex; flex-direction: column; gap: 14px; padding-bottom: 8px; }
 .module-page-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.module-page-heading__content { min-width: 0; }
+.module-page-back { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; margin-bottom: 7px; padding: 0; border: 0; color: #63778d; background: none; font: inherit; font-size: 10px; font-weight: 700; cursor: pointer; }
+.module-page-back:hover { color: #155b9e; }
 .module-page-heading h1 { margin: 5px 0 4px; color: #142a43; font: 750 22px/1.25 "Manrope", sans-serif; letter-spacing: -.035em; }
 .module-page-heading p:last-child { margin: 0; color: #8793a2; font-size: 11px; line-height: 1.5; }
 .module-heading-action { min-height: 40px; flex: 0 0 auto; padding: 0 12px; font-size: 11px; }
