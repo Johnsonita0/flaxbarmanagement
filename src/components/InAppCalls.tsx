@@ -257,10 +257,17 @@ function CallRoom({ callId, user, onClose }: { callId: string; user: CurrentUser
                 }
               } catch (presenceError: unknown) {
                 console.error("Could not join the secure in-app call room.", presenceError);
-                if (mountedRef.current) setError("The secure call room could not connect. Confirm the calls migration is applied.");
+                if (mountedRef.current) {
+                  setJoining(false);
+                  setError("The secure call room could not connect. Ask your administrator to apply the in-app call policy repair migration.");
+                }
               }
             } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-              if (mountedRef.current) setError("The secure call room could not connect. Confirm the calls migration is applied.");
+              console.error("In-app call Realtime channel failed to connect.", status);
+              if (mountedRef.current) {
+                setJoining(false);
+                setError("The secure call room could not connect. Check your connection and ask your administrator to apply the in-app call policy repair migration.");
+              }
             }
           });
       } catch (connectError: unknown) {
