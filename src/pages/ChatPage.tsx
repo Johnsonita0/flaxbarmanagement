@@ -437,7 +437,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
             <>
               <header className="chat-thread__heading">
                 <ChatAvatar name={activeConversation.peer.name} avatarPath={activeConversation.peer.avatarPath} />
-                <div><strong>{activeConversation.peer.name}</strong><small>{roleLabel(activeConversation.peer.role)}</small></div>
+                <div className="chat-thread__peer"><strong>{activeConversation.peer.name}</strong><small>{roleLabel(activeConversation.peer.role)}</small></div>
                 <div className="chat-thread__call-actions">
                   <button className="button button--outline" type="button" aria-label={`Voice call ${activeConversation.peer.name}`} title="Voice call" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], "audio")}><Phone size={16} /></button>
                   <button className="button button--outline" type="button" aria-label={`Video call ${activeConversation.peer.name}`} title="Video call" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], "video")}><Video size={16} /></button>
