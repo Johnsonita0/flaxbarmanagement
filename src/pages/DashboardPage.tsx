@@ -181,9 +181,9 @@ export default function DashboardPage({
   function renderSection() {
     switch (activeSection) {
       case "Department Hub": return <DepartmentHubPage />;
-      case "Staff": return user.role === "super_admin" ? <Suspense fallback={<div className="admin-empty">Loading user management…</div>}><AdminUsersPage /></Suspense> : <StaffPage user={user} onNavigate={navigate} />;
+      case "Staff": return user.role === "super_admin" || user.role === "management_admin" ? <Suspense fallback={<div className="admin-empty">Loading user management…</div>}><AdminUsersPage /></Suspense> : <StaffPage user={user} onNavigate={navigate} />;
       case "Attendance": return <AttendancePage canClockIn={user.role !== "super_admin"} />;
-      case "Departments": return <DepartmentsPage canManage={user.role === "super_admin"} />;
+      case "Departments": return <DepartmentsPage canManage={user.role === "super_admin" || user.role === "management_admin"} />;
       case "Inventory": return <InventoryPage user={user} onMovements={() => navigate("Stock Movement")} />;
       case "Stock Movement": return <StockMovementPage userId={user.id} onBack={() => navigate(user.role === "inventory_officer" || user.role === "management_admin" || user.role === "super_admin" ? "Inventory" : "Overview")} />;
       case "Sales": return <SalesPage user={user} />;
@@ -202,7 +202,7 @@ export default function DashboardPage({
             onNavigate={navigate}
           />
         );
-      case "Settings": return <SettingsPage canManage={user.role === "super_admin"} onManageUsers={() => navigate("Staff")} />;
+      case "Settings": return <SettingsPage canManage={user.role === "super_admin" || user.role === "management_admin"} onManageUsers={() => navigate("Staff")} />;
       case "Overview": return null;
     }
   }
@@ -222,6 +222,7 @@ export default function DashboardPage({
       <div className="workspace">
         <DashboardHeader
           section={activeSection}
+          companyName={user.companyName}
           name={name}
           role={roleLabel(user.role)}
           avatarPath={user.avatarPath}
@@ -243,7 +244,7 @@ export default function DashboardPage({
               <section className="welcome-banner">
                 <div className="welcome-banner__content">
                   <span className="welcome-banner__overline">YOUR WORKSPACE</span>
-                  <h2>Welcome to Flex Bar</h2>
+                  <h2>Welcome to {user.companyName}</h2>
                   <p>Your people and daily operations, together in one place.</p>
                   <span className="welcome-banner__role"><ShieldCheck size={14} />{roleLabel(user.role)}</span>
                 </div>

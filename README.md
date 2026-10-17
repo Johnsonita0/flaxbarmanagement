@@ -16,6 +16,10 @@ The frontend is configured as an installable PWA with a manifest and a shell-onl
 
 Super admins can register staff accounts with an initial password, manage roles and department assignments from the Staff area, and create departments from Departments. The registration form offers seven starter bar/restaurant assignments. Share initial passwords with staff securely. The super-admin can review attendance but does not have a clock-in action; attendance check-in is for staff and management roles.
 
+Department heads can start instant department meetings or schedule them for later. Administrators can start or schedule meetings for any department. Instant meetings open the live-call screen immediately and remain joinable for up to eight hours; scheduled rooms open 15 minutes before their start time.
+
+New company owners can register from the standalone `/signup` route. It is intentionally not linked from the existing sign-in screen. Supabase Auth public registration must be enabled with email confirmation, and the company-workspace migration must be applied before enabling it. Registration provisions a company-specific workspace and role-appropriate starter departments.
+
 ## Vercel
 
 Create a Vercel project connected to the frontend Git repository and set its Root Directory to `frontend`. Set `VITE_SUPABASE_URL`, either `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` in Vercel project settings. Set `VITE_API_BASE_URL` to the deployed backend's origin, for example `https://your-api-domain.vercel.app`; do not include a port or `/api/v1`, since the frontend adds API paths itself. This value is required for production builds; `localhost:3000` is used only by the local Vite development server. After setting or changing it, redeploy the frontend.

@@ -4,6 +4,7 @@ import "../css/DashboardHeader.css";
 
 export default function DashboardHeader({
   section,
+  companyName,
   name,
   role,
   avatarPath,
@@ -13,6 +14,7 @@ export default function DashboardHeader({
   unreadNotifications,
 }: {
   section: string;
+  companyName: string;
   name: string;
   role: string;
   avatarPath: string | null;
@@ -32,7 +34,7 @@ export default function DashboardHeader({
   return (
     <header className="topbar">
       <button className="icon-button topbar__menu" aria-label="Open menu" onClick={onToggleMenu}><Menu size={21} /></button>
-      <div className="breadcrumb"><span>Flex Bar</span><span>/</span><strong>{section}</strong></div>
+      <div className="breadcrumb"><span>{companyName}</span><span>/</span><strong>{section}</strong></div>
       <div className="topbar__actions">
         <button className="icon-button topbar__search" aria-label="Search"><Search size={19} /></button>
         <button className="icon-button notification-button" aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : "Notifications"} onClick={onNotifications}><Bell size={19} />{unreadNotifications > 0 && <span />}</button>

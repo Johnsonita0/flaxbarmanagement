@@ -11,6 +11,9 @@ export type AppRole =
 
 export interface CurrentUser {
   id: string;
+  companyId: string;
+  companyName: string;
+  businessType: "pharmacy" | "bar" | "restaurant" | "bar_restaurant";
   email: string | null;
   displayName: string | null;
   avatarPath: string | null;

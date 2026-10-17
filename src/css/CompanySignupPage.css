@@ -1,0 +1,4 @@
+.company-signup-card { width: min(100%, 490px); }
+.company-signup-mark { width: 46px; height: 46px; display: inline-grid; place-items: center; border-radius: 14px; color: #1763a8; background: #eef6fd; }
+.company-signup-select { width: 100%; min-height: 46px; padding: 0 12px; border: 1px solid #e1e7ef; border-radius: 9px; color: #253a52; background: #fff; font: inherit; }
+.company-signup-select:focus { outline: 2px solid rgba(22, 105, 190, .2); border-color: #81b5e8; }

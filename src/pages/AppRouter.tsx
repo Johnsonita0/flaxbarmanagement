@@ -9,6 +9,7 @@ import RoleSelectionPage from "./RoleSelectionPage";
 import SignInPage from "./SignInPage";
 import SplashScreen from "../components/SplashScreen";
 import LockPinGate from "./LockPinGate";
+import CompanySignupPage from "./CompanySignupPage";
 
 type AuthView = "sign-in" | "forgot-password" | "reset-password";
 
@@ -183,6 +184,29 @@ export default function AppRouter() {
     }
   }
 
+  async function signupCompany(details: {
+    companyName: string;
+    businessType: "pharmacy" | "bar" | "restaurant" | "bar_restaurant";
+    ownerName: string;
+    email: string;
+    password: string;
+  }) {
+    if (!supabase) throw new Error("Company registration is temporarily unavailable.");
+    const { error } = await supabase.auth.signUp({
+      email: details.email,
+      password: details.password,
+      options: {
+        emailRedirectTo: new URL("/", window.location.origin).toString(),
+        data: {
+          company_name: details.companyName,
+          business_type: details.businessType,
+          display_name: details.ownerName,
+        },
+      },
+    });
+    if (error) throw new Error(authFeedback(error, "We couldn't create your company workspace. Please try again."));
+  }
+
   async function sendPasswordReset(email: string) {
     if (!supabase) return;
     try {
@@ -328,7 +352,12 @@ export default function AppRouter() {
   }
 
   return (
-    <SignInPage
+    window.location.pathname === "/signup" ? (
+      <CompanySignupPage
+        supabaseConfigured={isSupabaseConfigured}
+        onSignup={signupCompany}
+      />
+    ) : <SignInPage
       view={authView}
       supabaseConfigured={isSupabaseConfigured}
       onSignIn={signIn}

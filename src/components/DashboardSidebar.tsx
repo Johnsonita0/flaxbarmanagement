@@ -87,7 +87,7 @@ export default function DashboardSidebar({
 
   const sectionsByRole: Record<AppRole, DashboardSection[]> = {
     super_admin: navigation.map(({ label }) => label),
-    management_admin: navigation.filter(({ label }) => label !== "Settings").map(({ label }) => label),
+    management_admin: navigation.map(({ label }) => label),
     department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
     inventory_officer: ["Overview", "Inventory", "Stock Movement", "Sales", "Tasks", "Reports", "Notifications", "Profile"],
     cash_sales_officer: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
