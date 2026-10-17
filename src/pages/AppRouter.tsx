@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { CurrentUser } from "../lib/api";
-import { apiRequest, fetchCurrentUser } from "../lib/api";
+import { apiRequest, claimDeviceSession, fetchCurrentUser, releaseDeviceSession } from "../lib/api";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useToast } from "../components/ToastProvider";
 import DashboardPage from "./DashboardPage";
@@ -58,6 +58,9 @@ export default function AppRouter() {
   const [authLoading, setAuthLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState("");
+  const [deviceSessionReady, setDeviceSessionReady] = useState(false);
+  const [deviceSessionError, setDeviceSessionError] = useState("");
+  const [deviceSessionRetry, setDeviceSessionRetry] = useState(0);
   const [roleConfirmed, setRoleConfirmed] = useState(false);
 
   useEffect(() => {
@@ -127,8 +130,49 @@ export default function AppRouter() {
 
   useEffect(() => {
     if (!session) {
-      setUser(null);
-      setProfileLoading(false);
+      setDeviceSessionReady(true);
+      setDeviceSessionError("");
+      return;
+    }
+
+    let mounted = true;
+    setDeviceSessionReady(false);
+    setDeviceSessionError("");
+    void claimDeviceSession(session).then((claimed) => {
+      if (!mounted) return;
+      if (claimed) {
+        setDeviceSessionReady(true);
+        return;
+      }
+      showToast("This account is already signed in on another device. Sign out there before trying again.", "error");
+      void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
+        if (!error || !mounted) return;
+        console.error("Could not clear the blocked device's local sign-in.", error);
+        setDeviceSessionError("This account is already active on another device. Sign out there, or try again after its inactive session expires.");
+        setDeviceSessionReady(true);
+      }).catch((error: unknown) => {
+        console.error("Could not clear the blocked device's local sign-in.", error);
+        if (mounted) {
+          setDeviceSessionError("This account is already active on another device. Sign out there, or try again after its inactive session expires.");
+          setDeviceSessionReady(true);
+        }
+      });
+    }).catch((error: unknown) => {
+      console.error("Could not verify the active account device.", error);
+      if (mounted) {
+        setDeviceSessionError(error instanceof Error ? error.message : "We couldn't verify this device.");
+        setDeviceSessionReady(true);
+      }
+    });
+    return () => { mounted = false; };
+  }, [session, deviceSessionRetry, showToast]);
+
+  useEffect(() => {
+    if (!session || !deviceSessionReady || deviceSessionError) {
+      if (!session) {
+        setUser(null);
+        setProfileLoading(false);
+      }
       return;
     }
 
@@ -159,11 +203,36 @@ export default function AppRouter() {
     return () => {
       mounted = false;
     };
-  }, [session]);
+  }, [session, deviceSessionReady, deviceSessionError]);
+
+  useEffect(() => {
+    if (!session || !deviceSessionReady || deviceSessionError) return;
+    let reportedFailure = false;
+    const heartbeat = () => {
+      void apiRequest("/api/v1/session/heartbeat")
+        .then(() => { reportedFailure = false; })
+        .catch((error: unknown) => {
+          if (!reportedFailure) console.error("Could not refresh the active account device session.", error);
+          reportedFailure = true;
+        });
+    };
+    const interval = window.setInterval(heartbeat, 60_000);
+    return () => window.clearInterval(interval);
+  }, [session, deviceSessionReady, deviceSessionError]);
+
+  useEffect(() => {
+    const handleSessionReplaced = () => {
+      showToast("Another device signed in to this account. This device has been signed out.", "error");
+      void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
+        if (error) console.error("Could not clear the replaced device's local sign-in.", error);
+      }).catch((error: unknown) => console.error("Could not clear the replaced device's local sign-in.", error));
+    };
+    window.addEventListener("flexbar:account-session-replaced", handleSessionReplaced);
+    return () => window.removeEventListener("flexbar:account-session-replaced", handleSessionReplaced);
+  }, [showToast]);
 
   useEffect(() => {
     if (!session || !user || user.role === "super_admin" || !user.hasLockPin || workspaceLocked) return;
-
     let timer = 0;
     const scheduleLock = () => {
       window.clearTimeout(timer);
@@ -247,14 +316,22 @@ export default function AppRouter() {
       void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
         console.error("Could not end in-app call sessions before password-reset sign-out.", callError);
       });
-      const { error: signOutError } = await supabase.auth.signOut();
+      const { signOutError, releaseError } = await signOutCurrentDevice();
       if (signOutError) {
         showToast(authFeedback(signOutError, "Your password was updated, but we couldn't end this session."), "error");
         return;
       }
+      if (releaseError) {
+        console.error("The password was updated, but the active device session could not be released.", releaseError);
+      }
       setAuthView("sign-in");
       setPasswordSetupRequired(false);
-      showToast("Your password has been updated. Sign in with your new password.", "success");
+      showToast(
+        releaseError
+          ? "Your password was updated and this device signed out. Another device may need to wait up to 15 minutes before signing in."
+          : "Your password has been updated. Sign in with your new password.",
+        releaseError ? "error" : "success",
+      );
     } catch (error: unknown) {
       showToast(authFeedback(error, "We couldn't update your password. Please try again."), "error");
     }
@@ -266,11 +343,35 @@ export default function AppRouter() {
       void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
         console.error("Could not end in-app call sessions before sign-out.", callError);
       });
-      const { error } = await supabase.auth.signOut();
-      if (error) showToast(authFeedback(error, "We couldn't sign you out. Please try again."), "error");
+      const { signOutError, releaseError } = await signOutCurrentDevice();
+      if (signOutError) {
+        showToast(authFeedback(signOutError, "We couldn't sign you out. Please try again."), "error");
+        return;
+      }
+      if (releaseError) {
+        console.error("The active device session could not be released during sign-out.", releaseError);
+        showToast("You were signed out, but another device may need to wait up to 15 minutes before signing in.", "error");
+      }
     } catch (error: unknown) {
       showToast(authFeedback(error, "We couldn't sign you out. Please try again."), "error");
     }
+  }
+
+  async function signOutCurrentDevice() {
+    if (!supabase) return { signOutError: null, releaseError: null };
+    let releaseError: unknown = null;
+    const { data: { session: activeSession }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      releaseError = sessionError;
+    } else if (activeSession) {
+      try {
+        await releaseDeviceSession(activeSession);
+      } catch (error: unknown) {
+        releaseError = error;
+      }
+    }
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+    return { signOutError, releaseError };
   }
 
   async function requestPasswordReset(email: string) {
@@ -282,6 +383,29 @@ export default function AppRouter() {
   }
 
   if (!splashComplete || authLoading) return <SplashScreen returningUser={returningUser} />;
+
+  if (session && !deviceSessionReady) {
+    return (
+      <main className="loading-screen" aria-live="polite">
+        <span className="spinner" aria-label="Loading" />
+        <p>Verifying this device…</p>
+      </main>
+    );
+  }
+
+  if (session && deviceSessionError) {
+    return (
+      <main className="auth-page">
+        <section className="auth-card auth-card--message">
+          <h1>Device verification unavailable</h1>
+          <div className="alert alert--error" role="alert">{deviceSessionError}</div>
+          <p className="muted-copy">We must verify this device before opening your company workspace.</p>
+          <button className="button button--primary" onClick={() => setDeviceSessionRetry((attempt) => attempt + 1)}>Try again</button>
+          <button className="button button--outline" onClick={() => void signOut()}>Sign out</button>
+        </section>
+      </main>
+    );
+  }
 
   if (session && profileLoading) {
     return (
