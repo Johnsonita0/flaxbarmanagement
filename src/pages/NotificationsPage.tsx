@@ -81,7 +81,7 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
           ? { ...item, readAt: new Date().toISOString() }
           : item));
         setUnreadCount((count) => Math.max(0, count - 1));
-        window.dispatchEvent(new Event("flexbar:notification"));
+        window.dispatchEvent(new Event("flexbar:notification-read"));
       }
       onOpenSection(getNotificationSection(notification.type));
     } catch (reason: unknown) {
@@ -111,7 +111,7 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
       await apiRequest("/api/v1/sales/notifications/read", { method: "PATCH" });
       setNotifications((current) => current.map((notification) => ({ ...notification, readAt: new Date().toISOString() })));
       setUnreadCount(0);
-      window.dispatchEvent(new Event("flexbar:notification"));
+      window.dispatchEvent(new Event("flexbar:notification-read"));
     } catch (reason: unknown) {
       showToast(reason instanceof Error ? reason.message : "We couldn't update your notifications.", "error");
     } finally {

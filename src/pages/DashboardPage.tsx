@@ -133,7 +133,7 @@ export default function DashboardPage({
       setActionError("");
       if (notificationId) {
         void apiRequest(`/api/v1/sales/notifications/${notificationId}/read`, { method: "PATCH" })
-          .then(() => setUnreadNotifications((count) => Math.max(0, count - 1)))
+          .then(() => window.dispatchEvent(new Event("flexbar:notification-read")))
           .catch((error: unknown) => console.error("Could not mark the device notification as read.", error));
       }
     };
@@ -176,6 +176,8 @@ export default function DashboardPage({
       }
     };
     void refreshUnreadCount();
+    const onNotificationRead = () => { void refreshUnreadCount(); };
+    window.addEventListener("flexbar:notification-read", onNotificationRead);
     const channel = realtimeClient
       .channel(`admin-sales-notifications-${user.id}`)
       .on("postgres_changes", {
@@ -211,6 +213,14 @@ export default function DashboardPage({
         }
         void refreshUnreadCount();
       })
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "notifications",
+        filter: `user_id=eq.${user.id}`,
+      }, () => {
+        void refreshUnreadCount();
+      })
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
           console.error("Could not subscribe to real-time notifications.", status);
@@ -218,6 +228,7 @@ export default function DashboardPage({
       });
     return () => {
       active = false;
+      window.removeEventListener("flexbar:notification-read", onNotificationRead);
       void realtimeClient.removeChannel(channel);
     };
   }, [user.id]);
