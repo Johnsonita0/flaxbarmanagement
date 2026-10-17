@@ -158,6 +158,8 @@
 .conversation-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 4px; border: 0; border-radius: 7px; text-align: left; background: transparent; }
 .conversation-row--active { background: #eef5fc; }
 .conversation-row .initial-avatar { width: 31px; height: 31px; }
+.chat-avatar { overflow: hidden; padding: 0; }
+.chat-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .conversation-row__time { color: #8b98a7; font-size: 8px; white-space: nowrap; }
 .conversation-row__meta { display: flex; align-items: flex-end; flex-direction: column; gap: 5px; }
 .chat-unread-count { min-width: 17px; padding: 2px 5px; border-radius: 10px; color: white; background: #2674b7; font-size: 8px; text-align: center; }
@@ -177,11 +179,17 @@
 .message-list { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; padding: 12px; overflow-y: auto; }
 .message-date { margin: 1px 0 4px; color: #96a1ae; font-size: 8px; text-align: center; letter-spacing: .12em; }
 .chat-bubble { max-width: 84%; padding: 9px 11px; border-radius: 10px; }
-.chat-bubble small { color: #8290a0; font-size: 8px; }
+.chat-bubble__sender { display: flex; align-items: center; gap: 6px; }
+.chat-bubble__sender .chat-avatar { width: 22px; height: 22px; font-size: 8px; }
+.chat-bubble__sender small { color: #8290a0; font-size: 8px; }
 .chat-bubble p { margin: 4px 0 0; color: #40546b; font-size: 10px; line-height: 1.5; }
-.chat-bubble time { display: block; margin-top: 5px; color: #8290a0; font-size: 8px; text-align: right; }
+.chat-bubble__meta { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 5px; color: #8290a0; }
+.chat-bubble__meta time { color: inherit; font-size: 8px; }
+.chat-message-receipt { color: #8a98a6; }
+.chat-message-receipt--delivered { color: #1684d4; }
 .chat-bubble--other { align-self: flex-start; background: #f1f4f7; }
 .chat-bubble--mine { align-self: flex-end; background: #e9f3fb; }
+.chat-typing-indicator { margin: 0; padding: 0 13px 7px; color: #2770ae; font-size: 9px; font-style: italic; }
 .chat-composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #edf1f5; }
 .chat-composer input { min-width: 0; flex: 1; padding: 0 11px; border: 1px solid #e4eaf0; border-radius: 8px; outline: none; color: #334a62; font-size: 10px; }
 .chat-composer button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 8px; color: white; background: #155b9e; }
@@ -304,7 +312,11 @@
 .sale-modal__actions .button { min-height: 40px; }
 .notification-row--unread { background: #f5f9fd; }
 .notification-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #2c80bd; }
-.notification-read-button { margin-left: auto; }
+.notification-controls { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.notification-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px; }
+.notification-actions .button { min-height: 34px; font-size: 9px; }
+.notification-device-status { color: #708197; font-size: 9px; }
+.notification-read-button { margin-left: 0; }
 .sales-report-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
 .sales-report-metric { padding: 16px; border: 1px solid #e7edf3; border-radius: 11px; background: linear-gradient(145deg, #fff, #f8fbfd); }
 .sales-report-metric span, .sales-report-metric strong { display: block; }
@@ -315,6 +327,8 @@
 .sales-report-bar span { width: min(25px, 75%); min-height: 4px; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #72b5e6, #216da9); }
 .sales-report-bar small { color: #8291a1; font-size: 8px; white-space: nowrap; }
 @media (max-width: 560px) {
+  .notification-controls { align-items: stretch; flex-direction: column; }
+  .notification-actions { justify-content: space-between; }
   .sales-catalog { padding: 14px; }
   .sales-catalog__heading { align-items: flex-start; }
   .sales-catalog__heading h2 { font-size: 17px; }

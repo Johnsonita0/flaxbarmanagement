@@ -122,6 +122,18 @@ export default function DashboardPage({
   }, [activeSection, user.id]);
 
   useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handleWorkerMessage = (event: MessageEvent<{ type?: string }>) => {
+      if (event.data?.type !== "flexbar:open-notifications") return;
+      setActiveSection("Notifications");
+      setSidebarOpen(false);
+      setActionError("");
+    };
+    navigator.serviceWorker.addEventListener("message", handleWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleWorkerMessage);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     void apiRequest<{ isDepartmentHead: boolean }>("/api/v1/department/access")
       .then((access) => {
@@ -145,14 +157,14 @@ export default function DashboardPage({
 
   useEffect(() => {
     const realtimeClient = supabase;
-    if (!realtimeClient || (user.role !== "super_admin" && user.role !== "management_admin")) return;
+    if (!realtimeClient) return;
     let active = true;
     const refreshUnreadCount = async () => {
       try {
-        const result = await apiRequest<{ notifications: { readAt: string | null }[] }>("/api/v1/sales/notifications");
-        if (active) setUnreadNotifications(result.notifications.filter((item) => !item.readAt).length);
+        const result = await apiRequest<{ unreadCount: number }>("/api/v1/sales/notifications");
+        if (active) setUnreadNotifications(result.unreadCount);
       } catch (error: unknown) {
-        if (active) console.error("Could not refresh administrator notifications.", error);
+        if (active) console.error("Could not refresh notifications.", error);
       }
     };
     void refreshUnreadCount();
@@ -163,20 +175,38 @@ export default function DashboardPage({
         schema: "public",
         table: "notifications",
         filter: `user_id=eq.${user.id}`,
-      }, () => {
+      }, (payload) => {
         window.dispatchEvent(new Event("flexbar:notification"));
+        if ("Notification" in window && Notification.permission === "granted") {
+          const row = payload.new as { id?: unknown; title?: unknown; detail?: unknown };
+          const title = typeof row.title === "string" ? row.title : "Flex Bar notification";
+          const body = typeof row.detail === "string" ? row.detail : "You have a new workspace update.";
+          const tag = typeof row.id === "string" ? `flexbar-notification-${row.id}` : undefined;
+          void (async () => {
+            try {
+              const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+              if (registration) {
+                await registration.showNotification(title, { body, icon: "/flexbar-icon.svg", tag, data: { url: "/" } });
+              } else {
+                new Notification(title, { body, icon: "/flexbar-icon.svg", tag });
+              }
+            } catch (error: unknown) {
+              console.error("Could not show a device notification.", error);
+            }
+          })();
+        }
         void refreshUnreadCount();
       })
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.error("Could not subscribe to real-time sales notifications.", status);
+          console.error("Could not subscribe to real-time notifications.", status);
         }
       });
     return () => {
       active = false;
       void realtimeClient.removeChannel(channel);
     };
-  }, [user.id, user.role]);
+  }, [user.id]);
 
   function renderSection() {
     switch (activeSection) {
@@ -192,7 +222,7 @@ export default function DashboardPage({
       case "Meeting Room": return <MeetingRoomPage user={user} />;
       case "Chat": return <ChatPage user={user} />;
       case "Reports": return <ReportsPage user={user} />;
-      case "Notifications": return <NotificationsPage user={user} />;
+      case "Notifications": return <NotificationsPage />;
       case "Profile":
         return (
           <ProfilePage

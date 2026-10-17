@@ -1,7 +1,9 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MessageCircle, Phone, Search, Send, Video, X } from "lucide-react";
+import { Check, CheckCheck, MessageCircle, Phone, Search, Send, Video, X } from "lucide-react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import PageHeading from "../components/PageHeading";
-import { apiRequest, type AppRole, type CurrentUser } from "../lib/api";
+import { useToast } from "../components/ToastProvider";
+import { apiRequest, getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { roleLabel } from "../lib/roles";
 import { useInAppCalls } from "../components/InAppCalls";
@@ -12,14 +14,16 @@ interface ChatPerson {
   name: string;
   role: AppRole;
   departmentName: string;
+  avatarPath: string | null;
 }
 
 interface ChatConversation {
   id: string;
-  peer: { id: string; name: string; role: AppRole };
+  peer: { id: string; name: string; role: AppRole; avatarPath: string | null };
   lastMessage: string;
   lastMessageAt: string;
   lastMessageFromMe: boolean;
+  lastMessageDeliveredAt: string | null;
   unreadCount: number;
   lastReadAt: string | null;
 }
@@ -28,13 +32,30 @@ interface ChatMessage {
   id: string;
   senderId: string | null;
   senderName: string;
+  senderAvatarPath: string | null;
   body: string;
   createdAt: string;
+  deliveredAt: string | null;
   fromMe: boolean;
+}
+
+interface ChatTypingPresence {
+  userId: string;
+  name: string;
+  typing: boolean;
 }
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("");
+}
+
+function ChatAvatar({ name, avatarPath }: { name: string; avatarPath: string | null }) {
+  const photoUrl = getProfilePhotoUrl(avatarPath);
+  return (
+    <span className="initial-avatar chat-avatar">
+      {photoUrl ? <img src={photoUrl} alt="" /> : initials(name)}
+    </span>
+  );
 }
 
 function formatTime(value: string) {
@@ -60,9 +81,14 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
   const [startingPersonId, setStartingPersonId] = useState<string | null>(null);
+  const [typingNames, setTypingNames] = useState<string[]>([]);
+  const [typingChannelReady, setTypingChannelReady] = useState(false);
   const messageListRef = useRef<HTMLDivElement>(null);
   const messageRequestId = useRef(0);
+  const typingChannelRef = useRef<RealtimeChannel | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { startCall } = useInAppCalls();
+  const { showToast } = useToast();
 
   const loadConversations = useCallback(async () => {
     try {
@@ -148,7 +174,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     if (!realtime) return;
     const channel = realtime.channel(`chat-messages-${conversationId}`)
       .on("postgres_changes", {
-        event: "INSERT",
+        event: "*",
         schema: "public",
         table: "chat_messages",
         filter: `conversation_id=eq.${conversationId}`,
@@ -173,6 +199,78 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
       void realtime.removeChannel(channel);
     };
   }, [conversationId, loadConversations, loadMessages]);
+
+  useEffect(() => {
+    const realtime = supabase;
+    setTypingNames([]);
+    setTypingChannelReady(false);
+    if (!realtime || !conversationId) return;
+
+    const channel = realtime.channel(`chat-typing:${conversationId}`, {
+      config: { private: true, presence: { key: user.id } },
+    });
+    const updateTypingNames = () => {
+      const presence = channel.presenceState<ChatTypingPresence>();
+      const names = Object.values(presence)
+        .flat()
+        .filter((item) => item.userId !== user.id && item.typing)
+        .map((item) => item.name);
+      setTypingNames([...new Set(names)]);
+    };
+    channel.on("presence", { event: "sync" }, updateTypingNames);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        typingChannelRef.current = channel;
+        setTypingChannelReady(true);
+        void channel.track({
+          userId: user.id,
+          name: user.displayName?.trim() || "Team member",
+          typing: false,
+        }).then((result) => {
+          if (result !== "ok") console.error("Could not initialize chat typing presence.", result);
+        });
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.error("Could not subscribe to chat typing presence.", status);
+      }
+    });
+
+    return () => {
+      if (typingChannelRef.current === channel) typingChannelRef.current = null;
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      void realtime.removeChannel(channel);
+    };
+  }, [conversationId, user.displayName, user.id]);
+
+  useEffect(() => {
+    const channel = typingChannelRef.current;
+    if (!channel || !typingChannelReady) return;
+    const typing = Boolean(messageText.trim());
+    void channel.track({
+      userId: user.id,
+      name: user.displayName?.trim() || "Team member",
+      typing,
+    }).then((result) => {
+      if (result !== "ok") console.error("Could not update chat typing presence.", result);
+    });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (typing) {
+      typingTimeoutRef.current = setTimeout(() => {
+        const activeChannel = typingChannelRef.current;
+        if (activeChannel) {
+          void activeChannel.track({
+            userId: user.id,
+            name: user.displayName?.trim() || "Team member",
+            typing: false,
+          }).then((result) => {
+            if (result !== "ok") console.error("Could not clear chat typing presence.", result);
+          });
+        }
+      }, 2500);
+    }
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    };
+  }, [messageText, typingChannelReady, user.displayName, user.id]);
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -212,6 +310,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
         body: JSON.stringify({ userId: person.id }),
       });
       setConversationId(result.conversationId);
+      setMessageText("");
       setShowNewConversation(false);
       setPeopleSearch("");
       await loadConversations();
@@ -230,12 +329,22 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     setSending(true);
     setPageError("");
     try {
-      const result = await apiRequest<{ message: ChatMessage }>(`/api/v1/chat/conversations/${conversationId}/messages`, {
+      const result = await apiRequest<{ message: ChatMessage; notificationWarning: boolean }>(`/api/v1/chat/conversations/${conversationId}/messages`, {
         method: "POST",
         body: JSON.stringify({ body }),
       });
       setMessages((current) => current.some((message) => message.id === result.message.id) ? current : [...current, result.message]);
       setMessageText("");
+      if (result.notificationWarning) {
+        showToast("Your message was sent, but the recipient notification could not be delivered.", "error");
+      }
+      const channel = typingChannelRef.current;
+      if (channel) {
+        void channel.track({ userId: user.id, name: user.displayName?.trim() || "Team member", typing: false })
+          .then((status) => {
+            if (status !== "ok") console.error("Could not clear chat typing presence after sending.", status);
+          });
+      }
       await loadConversations();
     } catch (error: unknown) {
       console.error("Could not send chat message.", error);
@@ -285,7 +394,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                       ? [...current, person.id]
                       : current.filter((id) => id !== person.id))}
                   />
-                  <span className="initial-avatar">{initials(person.name)}</span>
+                  <ChatAvatar name={person.name} avatarPath={person.avatarPath} />
                   <span className="record-row__main"><strong>{person.name}</strong><small>{person.departmentName} · {roleLabel(person.role)}</small></span>
                 </label>
               ))}
@@ -299,7 +408,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
               {!filteredPeople.length && <p className="empty-state">{people.length ? "No colleagues match that search." : "No active colleagues are available to message."}</p>}
               {filteredPeople.map((person) => (
                 <button className="conversation-row" key={person.id} onClick={() => void startConversation(person)} disabled={startingPersonId !== null}>
-                  <span className="initial-avatar">{initials(person.name)}</span>
+                  <ChatAvatar name={person.name} avatarPath={person.avatarPath} />
                   <span className="record-row__main"><strong>{person.name}</strong><small>{person.departmentName} · {roleLabel(person.role)}</small></span>
                   {startingPersonId === person.id && <span className="conversation-row__time">Opening…</span>}
                 </button>
@@ -313,9 +422,9 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 <button
                   className={`conversation-row${conversation.id === conversationId ? " conversation-row--active" : ""}`}
                   key={conversation.id}
-                  onClick={() => { setConversationId(conversation.id); setShowNewConversation(false); }}
+                  onClick={() => { setConversationId(conversation.id); setMessageText(""); setShowNewConversation(false); }}
                 >
-                  <span className="initial-avatar">{initials(conversation.peer.name)}</span>
+                  <ChatAvatar name={conversation.peer.name} avatarPath={conversation.peer.avatarPath} />
                   <span className="record-row__main"><strong>{conversation.peer.name}</strong><small>{conversation.lastMessage ? `${conversation.lastMessageFromMe ? "You: " : ""}${conversation.lastMessage}` : roleLabel(conversation.peer.role)}</small></span>
                   <span className="conversation-row__meta"><time className="conversation-row__time">{formatTime(conversation.lastMessageAt)}</time>{conversation.unreadCount > 0 && <span className="chat-unread-count">{conversation.unreadCount}</span>}</span>
                 </button>
@@ -327,7 +436,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
           {activeConversation ? (
             <>
               <header className="chat-thread__heading">
-                <span className="initial-avatar">{initials(activeConversation.peer.name)}</span>
+                <ChatAvatar name={activeConversation.peer.name} avatarPath={activeConversation.peer.avatarPath} />
                 <div><strong>{activeConversation.peer.name}</strong><small>{roleLabel(activeConversation.peer.role)}</small></div>
                 <div className="chat-thread__call-actions">
                   <button className="button button--outline" type="button" aria-label={`Voice call ${activeConversation.peer.name}`} title="Voice call" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], "audio")}><Phone size={16} /></button>
@@ -339,12 +448,22 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 {!messagesLoading && !messages.length && <p className="empty-state">This is the start of your conversation with {activeConversation.peer.name}.</p>}
                 {messages.map((message) => (
                   <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                    {!message.fromMe && <small>{message.senderName}</small>}
+                    {!message.fromMe && <div className="chat-bubble__sender"><ChatAvatar name={message.senderName} avatarPath={message.senderAvatarPath} /><small>{message.senderName}</small></div>}
                     <p>{message.body}</p>
-                    <time>{formatTime(message.createdAt)}</time>
+                    <div className="chat-bubble__meta">
+                      <time>{formatTime(message.createdAt)}</time>
+                      {message.fromMe && (message.deliveredAt
+                        ? <CheckCheck className="chat-message-receipt chat-message-receipt--delivered" size={13} aria-label="Delivered" />
+                        : <Check className="chat-message-receipt" size={13} aria-label="Sent" />)}
+                    </div>
                   </article>
                 ))}
               </div>
+              {typingNames.length > 0 && (
+                <p className="chat-typing-indicator" aria-live="polite">
+                  {typingNames.length === 1 ? `${typingNames[0]} is typing…` : `${typingNames.join(", ")} are typing…`}
+                </p>
+              )}
               <form className="chat-composer" onSubmit={(event) => void sendMessage(event)}>
                 <input
                   aria-label="Write a message"

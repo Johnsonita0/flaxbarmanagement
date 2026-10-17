@@ -37,7 +37,7 @@ export default function DashboardHeader({
       <div className="breadcrumb"><span>{companyName}</span><span>/</span><strong>{section}</strong></div>
       <div className="topbar__actions">
         <button className="icon-button topbar__search" aria-label="Search"><Search size={19} /></button>
-        <button className="icon-button notification-button" aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : "Notifications"} onClick={onNotifications}><Bell size={19} />{unreadNotifications > 0 && <span />}</button>
+        <button className="icon-button notification-button" aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : "Notifications"} onClick={onNotifications}><Bell size={19} />{unreadNotifications > 0 && <span>{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}</button>
         <div className="topbar__divider" />
         <button className="account account--button" onClick={onProfile} aria-label={`Open profile for ${name}`}>
           <span className="account__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials || "FB"}</span>

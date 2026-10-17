@@ -6,7 +6,7 @@
 .icon-button { width: 35px; height: 35px; display: grid; place-items: center; border: 0; border-radius: 8px; color: #75849a; background: transparent; }
 .icon-button:hover { color: #153c68; background: #f1f5f9; }
 .notification-button { position: relative; }
-.notification-button > span { position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border: 1px solid white; border-radius: 50%; background: #e5a93c; }
+.notification-button > span { position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; display: grid; place-items: center; padding: 0 3px; border: 1px solid white; border-radius: 9px; color: white; background: #d47e21; font-size: 8px; font-weight: 700; line-height: 1; }
 .topbar__divider { height: 29px; width: 1px; margin: 0 3px; background: #e6ebf1; }
 .account { display: flex; align-items: center; gap: 9px; }
 .account--button { border: 0; padding: 0; color: inherit; text-align: left; background: transparent; }
