@@ -18,6 +18,7 @@ import { getNotificationSection } from "../lib/notifications";
 import { roleLabel } from "../lib/roles";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebar";
+import { useToast } from "../components/ToastProvider";
 import type { DashboardSection } from "../components/DashboardSidebar";
 import MobileNav from "../components/MobileNav";
 import ModuleCard from "../components/ModuleCard";
@@ -37,6 +38,7 @@ import StockMovementPage from "./StockMovementPage";
 import StaffHomePage from "./StaffHomePage";
 import DepartmentHubPage from "./DepartmentHubPage";
 import TasksPage from "./TasksPage";
+import { useInAppCalls } from "../components/InAppCalls";
 import "../css/DashboardPage.css";
 
 const AdminUsersPage = lazy(() => import("./AdminUsersPage"));
@@ -95,6 +97,8 @@ export default function DashboardPage({
   onRequestPasswordReset: (email: string) => Promise<void>;
   onUserUpdated: (user: CurrentUser) => void;
 }) {
+  const { endActiveCall } = useInAppCalls();
+  const { showToast } = useToast();
   const [restoration] = useState(() => readLastSection(user.id, user.role));
   const [activeSection, setActiveSection] = useState<DashboardSection>(restoration.section);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -112,6 +116,16 @@ export default function DashboardPage({
     setActiveSection(section);
     setSidebarOpen(false);
     setActionError("");
+  }
+
+  async function signOutAfterEndingCall() {
+    try {
+      await endActiveCall();
+      await onSignOut();
+    } catch (error: unknown) {
+      console.error("Could not end the call before signing out.", error);
+      showToast(error instanceof Error ? error.message : "End the active call before signing out.", "error");
+    }
   }
 
   useEffect(() => {
@@ -272,7 +286,7 @@ export default function DashboardPage({
         open={sidebarOpen}
         onNavigate={navigate}
         onClose={() => setSidebarOpen(false)}
-        onSignOut={onSignOut}
+        onSignOut={() => void signOutAfterEndingCall()}
       />
       <div className="workspace">
         <DashboardHeader

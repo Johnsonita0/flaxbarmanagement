@@ -47,6 +47,7 @@ interface CallPresence {
 
 interface CallsContextValue {
   startCall: (participantIds: string[], mediaMode: MediaMode) => Promise<void>;
+  endActiveCall: () => Promise<void>;
   callError: string;
 }
 
@@ -74,7 +75,17 @@ function CallVideo({ stream, muted = false }: { stream: MediaStream | null; mute
   return <video ref={ref} autoPlay playsInline muted={muted} />;
 }
 
-function CallRoom({ callId, user, onClose }: { callId: string; user: CurrentUser; onClose: () => void }) {
+function CallRoom({
+  callId,
+  user,
+  onClose,
+  onRegisterFinish,
+}: {
+  callId: string;
+  user: CurrentUser;
+  onClose: () => void;
+  onRegisterFinish: (finish: (() => Promise<void>) | null) => void;
+}) {
   const [details, setDetails] = useState<CallRoomDetails | null>(null);
   const [participants, setParticipants] = useState<CallPresence[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
@@ -360,24 +371,41 @@ function CallRoom({ callId, user, onClose }: { callId: string; user: CurrentUser
     setMuted(nextMuted);
   }
 
-  async function finishCall() {
-    if (details?.call.isCaller && channelRef.current) {
-      const result = await channelRef.current.send({
-        type: "broadcast",
-        event: "call-ended",
-        payload: { callId },
-      });
-      if (result !== "ok") console.error("Could not notify call participants that the call ended.", result);
-    }
-    closeResources();
+  const finishingRef = useRef(false);
+  const finishCall = useCallback(async () => {
+    if (finishingRef.current) return;
+    finishingRef.current = true;
     try {
-      await apiRequest(`/api/v1/calls/${callId}/${details?.call.isCaller ? "end" : "leave"}`, { method: "PATCH" });
+      const isCaller = details?.call.isCaller
+        ?? (await apiRequest<CallRoomDetails>(`/api/v1/calls/${callId}`)).call.isCaller;
+      if (isCaller && channelRef.current) {
+        try {
+          const result = await channelRef.current.send({
+            type: "broadcast",
+            event: "call-ended",
+            payload: { callId },
+          });
+          if (result !== "ok") console.error("Could not notify call participants that the call ended.", result);
+        } catch (broadcastError: unknown) {
+          console.error("Could not broadcast call end; ending the call through the API instead.", broadcastError);
+        }
+      }
+      await apiRequest(`/api/v1/calls/${callId}/${isCaller ? "end" : "leave"}`, { method: "PATCH" });
+      closeResources();
+      onClose();
     } catch (leaveError: unknown) {
       console.error("Could not update in-app call status.", leaveError);
       setError(leaveError instanceof Error ? leaveError.message : "Call status could not be updated.");
+      throw leaveError;
+    } finally {
+      finishingRef.current = false;
     }
-    onClose();
-  }
+  }, [callId, closeResources, details?.call.isCaller, onClose]);
+
+  useEffect(() => {
+    onRegisterFinish(finishCall);
+    return () => onRegisterFinish(null);
+  }, [finishCall, onRegisterFinish]);
 
   return (
     <div className="call-overlay" role="dialog" aria-modal="true" aria-label="In-app call">
@@ -411,7 +439,7 @@ function CallRoom({ callId, user, onClose }: { callId: string; user: CurrentUser
         <footer className="call-window__controls">
           <button className="button button--outline" type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}>{muted ? <MicOff size={17} /> : <Mic size={17} />}{muted ? "Unmute" : "Mute"}</button>
           <button className="button button--outline" type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Turn camera on" : "Turn camera off"}>{cameraOff ? <VideoOff size={17} /> : <Video size={17} />}{cameraBusy ? "Updating…" : cameraOff ? "Camera on" : "Camera off"}</button>
-          <button className="button button--danger" type="button" onClick={() => void finishCall()}><PhoneOff size={17} />End call</button>
+          <button className="button button--danger" type="button" onClick={() => void finishCall().catch(() => {})}><PhoneOff size={17} />End call</button>
         </footer>
       </section>
     </div>
@@ -423,6 +451,23 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
   const [invitations, setInvitations] = useState<CallInvitation[]>([]);
   const [callError, setCallError] = useState("");
   const startingRef = useRef(false);
+  const finishCallRef = useRef<(() => Promise<void>) | null>(null);
+
+  const registerFinishCall = useCallback((finish: (() => Promise<void>) | null) => {
+    finishCallRef.current = finish;
+  }, []);
+
+  const endActiveCall = useCallback(async () => {
+    if (!activeCallId) return;
+    if (finishCallRef.current) {
+      await finishCallRef.current();
+      return;
+    }
+
+    const details = await apiRequest<CallRoomDetails>(`/api/v1/calls/${activeCallId}`);
+    await apiRequest(`/api/v1/calls/${activeCallId}/${details.call.isCaller ? "end" : "leave"}`, { method: "PATCH" });
+    setActiveCallId(null);
+  }, [activeCallId]);
 
   const startCall = useCallback(async (participantIds: string[], mediaMode: MediaMode) => {
     if (startingRef.current || activeCallId) throw new Error("Finish the current call before starting another.");
@@ -493,7 +538,7 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
 
   const incoming = invitations[0];
   return (
-    <CallsContext.Provider value={{ startCall, callError }}>
+    <CallsContext.Provider value={{ startCall, endActiveCall, callError }}>
       {children}
       {incoming && !activeCallId && (
         <div className="call-incoming" role="dialog" aria-modal="true" aria-label="Incoming call">
@@ -506,7 +551,7 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
           </div>
         </div>
       )}
-      {activeCallId && <CallRoom callId={activeCallId} user={user} onClose={() => setActiveCallId(null)} />}
+      {activeCallId && <CallRoom callId={activeCallId} user={user} onClose={() => setActiveCallId(null)} onRegisterFinish={registerFinishCall} />}
       {callError && <div className="call-toast" role="alert">{callError}<button type="button" onClick={() => setCallError("")} aria-label="Dismiss call error">×</button></div>}
     </CallsContext.Provider>
   );
