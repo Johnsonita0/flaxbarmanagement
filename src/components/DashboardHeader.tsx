@@ -10,6 +10,7 @@ export default function DashboardHeader({
   onToggleMenu,
   onNotifications,
   onProfile,
+  unreadNotifications,
 }: {
   section: string;
   name: string;
@@ -18,6 +19,7 @@ export default function DashboardHeader({
   onToggleMenu: () => void;
   onNotifications: () => void;
   onProfile: () => void;
+  unreadNotifications: number;
 }) {
   const initials = name
     .split(/[ @._-]+/)
@@ -33,7 +35,7 @@ export default function DashboardHeader({
       <div className="breadcrumb"><span>Flex Bar</span><span>/</span><strong>{section}</strong></div>
       <div className="topbar__actions">
         <button className="icon-button topbar__search" aria-label="Search"><Search size={19} /></button>
-        <button className="icon-button notification-button" aria-label="Notifications" onClick={onNotifications}><Bell size={19} /><span /></button>
+        <button className="icon-button notification-button" aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : "Notifications"} onClick={onNotifications}><Bell size={19} />{unreadNotifications > 0 && <span />}</button>
         <div className="topbar__divider" />
         <button className="account account--button" onClick={onProfile} aria-label={`Open profile for ${name}`}>
           <span className="account__avatar">{avatarUrl ? <img src={avatarUrl} alt="" /> : initials || "FB"}</span>

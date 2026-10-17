@@ -15,6 +15,8 @@ export interface CurrentUser {
   displayName: string | null;
   avatarPath: string | null;
   hasLockPin: boolean;
+  departmentId: string | null;
+  salesEnabled: boolean;
   role: AppRole;
 }
 
@@ -40,8 +42,20 @@ function getApiBaseUrl(): string {
 export interface Department {
   id: string;
   name: string;
+  salesEnabled: boolean;
+  salesEligible?: boolean;
+  members?: DepartmentMember[];
+  headUserId?: string | null;
+  headName?: string | null;
   created_at?: string;
   staffCount?: number;
+}
+
+export interface DepartmentMember {
+  id: string;
+  name: string;
+  role: AppRole;
+  isActive: boolean;
 }
 
 export interface ManagedUser {
@@ -63,6 +77,9 @@ export interface InventoryProduct {
   unit: string;
   reorder: number;
   imagePath: string | null;
+  departmentId: string | null;
+  departmentName: string | null;
+  price: number;
   createdAt: string;
   updatedAt: string;
 }

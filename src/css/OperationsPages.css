@@ -15,6 +15,8 @@
 .staff-profile-card > .button { width: 100%; }
 .department-grid { display: grid; gap: 9px; }
 .department-card { display: flex; align-items: center; gap: 10px; padding: 13px 11px; }
+.department-card--expanded { align-items: stretch; flex-direction: column; gap: 0; }
+.department-card__summary { width: 100%; display: flex; align-items: center; gap: 10px; }
 .department-icon { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; }
 .department-icon--blue { color: #2671b6; background: #eaf3fc; }
 .department-icon--green { color: #319568; background: #eaf7ef; }
@@ -27,6 +29,21 @@
 .department-card__text small { margin-top: 4px; color: #8996a5; font-size: 9px; }
 .department-card__count { color: #718197; font-size: 9px; white-space: nowrap; }
 .department-card__link { width: 28px; height: 28px; display: grid; flex: 0 0 auto; place-items: center; border: 0; border-radius: 7px; color: #8795a6; background: #f5f7fa; }
+.department-sales-unavailable { color: #929eab; font-size: 9px; white-space: nowrap; }
+.department-members { width: 100%; margin-top: 12px; padding-top: 11px; border-top: 1px solid #edf1f5; }
+.department-members__heading { display: flex; align-items: center; justify-content: space-between; margin: 0 2px 7px; color: #465d74; font-size: 10px; }
+.department-members__heading span { min-width: 20px; padding: 3px 6px; border-radius: 12px; color: #55718b; background: #eef3f7; font-size: 8px; text-align: center; }
+.department-head-select { display: grid; gap: 6px; margin: 8px 0; color: #607287; font-size: 9px; font-weight: 600; }
+.department-head-select select { min-height: 34px; padding: 0 9px; border: 1px solid #e1e8ee; border-radius: 7px; color: #354a60; background: white; font: inherit; }
+.department-member { display: flex; align-items: center; gap: 9px; padding: 8px 2px; border-bottom: 1px solid #f0f3f6; }
+.department-member:last-child { border-bottom: 0; }
+.department-member__avatar { width: 30px; height: 30px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 50%; color: #2e6b9f; background: #eaf3fa; font-size: 9px; font-weight: 700; }
+.department-member__details { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.department-member__details strong { overflow: hidden; color: #3e5369; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.department-member__details small { color: #8996a4; font-size: 8px; text-transform: capitalize; }
+.department-member__status { padding: 4px 7px; border-radius: 12px; color: #9b6262; background: #fbefef; font-size: 8px; font-weight: 600; }
+.department-member__status--active { color: #338054; background: #eaf6ee; }
+.department-members__empty { margin: 10px 2px 2px; color: #8996a4; font-size: 9px; }
 .map-preview { position: relative; height: 190px; overflow: hidden; border: 1px solid #e2e9ee; border-radius: 10px; background: linear-gradient(130deg, #e8f1e9, #edf2eb 36%, #e7edf4 37%, #e6eef6 72%, #eff2e9); }
 .map-preview__grid { position: absolute; inset: -30%; background: repeating-linear-gradient(35deg, transparent 0 25px, rgba(255,255,255,.8) 26px 30px, transparent 31px 55px), repeating-linear-gradient(115deg, transparent 0 38px, rgba(186,203,190,.35) 39px 42px, transparent 43px 82px); transform: rotate(-8deg); }
 .map-preview__pin { position: absolute; top: 43%; left: 50%; z-index: 2; color: #18875c; transform: translate(-50%, -50%); }
@@ -94,37 +111,84 @@
 .meeting-card__top strong { color: #384d64; font-size: 11px; }
 .meeting-card__top small { color: #8996a5; font-size: 9px; white-space: nowrap; }
 .meeting-card__content p { margin: 8px 0 3px; color: #77879a; font-size: 10px; line-height: 1.55; }
+.meeting-detail__call { margin-top: 17px; padding-top: 14px; border-top: 1px solid #edf1f5; }
+.meeting-detail__call > p { color: #718197; font-size: 10px; line-height: 1.6; }
+.meeting-call { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; }
+.meeting-call__intro, .meeting-call__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.meeting-call__intro h3, .meeting-call__header h3 { margin: 0; color: #30465e; font: 700 13px "Manrope", sans-serif; }
+.meeting-call__intro p, .meeting-call__header p { margin: 5px 0 0; color: #7c8b9b; font-size: 10px; line-height: 1.55; }
+.meeting-call__live { padding: 5px 8px; border-radius: 5px; color: #a63f46; background: #fff0ef; font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.meeting-call__notice { margin: 0; padding: 9px 10px; border-radius: 7px; color: #5d6e82; background: #f4f7fa; font-size: 9px; line-height: 1.55; }
+.meeting-call__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 9px; min-height: 155px; }
+.meeting-video-tile { position: relative; min-height: 155px; overflow: hidden; border-radius: 9px; background: #18293b; }
+.meeting-video-tile > video { width: 100%; height: 100%; min-height: 155px; display: block; object-fit: cover; }
+.meeting-video-tile > span { position: absolute; right: 8px; bottom: 8px; padding: 5px 7px; border-radius: 5px; color: white; background: rgba(9, 24, 40, .72); font-size: 9px; }
+.meeting-video-tile__label { display: inline-flex; align-items: center; gap: 7px; }
+.meeting-video-tile--local { background: #edf2f7; }
+.meeting-video--local { transform: scaleX(-1); }
+.meeting-audio-participant { min-height: 130px; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 7px; border: 1px solid #e6edf3; border-radius: 9px; background: #f8fafc; }
+.meeting-audio-participant strong { color: #344a61; font-size: 10px; }
+.meeting-audio-participant small { color: #8090a0; font-size: 9px; }
+.meeting-audio-participant__avatar { position: relative; display: grid; place-items: center; }
+.meeting-participant-avatar { width: 44px; height: 44px; display: block; border: 2px solid white; border-radius: 50%; object-fit: cover; box-shadow: 0 1px 5px rgba(24, 47, 70, .14); }
+.meeting-audio-participant__avatar .initial-avatar { width: 44px; height: 44px; }
+.meeting-sound-wave { width: 20px; height: 17px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; padding: 2px 4px; border-radius: 6px; color: #8493a3; background: rgba(238, 243, 248, .96); }
+.meeting-sound-wave i { width: 2px; height: 4px; display: block; border-radius: 2px; background: currentColor; }
+.meeting-sound-wave--active { color: #13865d; background: #e2f5eb; box-shadow: 0 0 0 2px rgba(39, 166, 107, .13); }
+.meeting-sound-wave--active i:nth-child(1), .meeting-sound-wave--active i:nth-child(4) { animation: meeting-wave 620ms ease-in-out infinite alternate; }
+.meeting-sound-wave--active i:nth-child(2) { animation: meeting-wave 450ms ease-in-out infinite alternate-reverse; }
+.meeting-sound-wave--active i:nth-child(3) { animation: meeting-wave 520ms ease-in-out infinite alternate; }
+.meeting-audio-participant__avatar .meeting-sound-wave { position: absolute; right: -8px; bottom: -3px; }
+.meeting-audio-participant > audio { display: none; }
+@keyframes meeting-wave { from { height: 3px; } to { height: 12px; } }
+.meeting-call__waiting { grid-column: 1 / -1; align-self: center; color: #8694a3; font-size: 10px; text-align: center; }
+.meeting-call__controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.meeting-call__controls .button { min-height: 38px; font-size: 10px; }
+.meeting-call__controls .button--danger { border-color: #f1d7d7; color: #a63d43; background: #fff2f1; }
+.meeting-call__controls .button--danger:hover { background: #ffe6e4; }
+@media (prefers-reduced-motion: reduce) { .meeting-sound-wave--active i { animation: none !important; height: 8px; } }
 .post-detail h2 { margin: 15px 0 8px; color: #30465e; font: 700 16px "Manrope", sans-serif; }
 .post-detail p { margin: 9px 0; color: #65768a; font-size: 12px; line-height: 1.7; }
 .post-detail > small { color: #8a97a6; font-size: 9px; }
 .chat-layout { min-height: 420px; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
 .chat-conversations { display: flex; flex-direction: column; gap: 0; padding: 10px; border-bottom: 1px solid #edf1f5; }
 .chat-conversations .search-field { margin-bottom: 7px; }
+.chat-list-scroll { min-height: 0; max-height: 260px; overflow-y: auto; }
 .conversation-row { min-width: 0; display: flex; align-items: center; gap: 8px; padding: 9px 4px; border: 0; border-radius: 7px; text-align: left; background: transparent; }
 .conversation-row--active { background: #eef5fc; }
 .conversation-row .initial-avatar { width: 31px; height: 31px; }
 .conversation-row__time { color: #8b98a7; font-size: 8px; white-space: nowrap; }
+.conversation-row__meta { display: flex; align-items: flex-end; flex-direction: column; gap: 5px; }
+.chat-unread-count { min-width: 17px; padding: 2px 5px; border-radius: 10px; color: white; background: #2674b7; font-size: 8px; text-align: center; }
 .chat-thread { min-height: 320px; display: flex; flex: 1; flex-direction: column; }
 .chat-thread__heading { display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-bottom: 1px solid #edf1f5; }
 .chat-thread__heading > div strong, .chat-thread__heading > div small { display: block; }
 .chat-thread__heading > div strong { color: #334a62; font-size: 11px; }
 .chat-thread__heading > div small { margin-top: 3px; color: #8896a5; font-size: 9px; }
-.message-list { flex: 1; display: flex; flex-direction: column; gap: 9px; padding: 12px; }
+.message-list { min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 9px; padding: 12px; overflow-y: auto; }
 .message-date { margin: 1px 0 4px; color: #96a1ae; font-size: 8px; text-align: center; letter-spacing: .12em; }
 .chat-bubble { max-width: 84%; padding: 9px 11px; border-radius: 10px; }
 .chat-bubble small { color: #8290a0; font-size: 8px; }
 .chat-bubble p { margin: 4px 0 0; color: #40546b; font-size: 10px; line-height: 1.5; }
+.chat-bubble time { display: block; margin-top: 5px; color: #8290a0; font-size: 8px; text-align: right; }
 .chat-bubble--other { align-self: flex-start; background: #f1f4f7; }
 .chat-bubble--mine { align-self: flex-end; background: #e9f3fb; }
 .chat-composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #edf1f5; }
 .chat-composer input { min-width: 0; flex: 1; padding: 0 11px; border: 1px solid #e4eaf0; border-radius: 8px; outline: none; color: #334a62; font-size: 10px; }
 .chat-composer button { width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 8px; color: white; background: #155b9e; }
 .chat-composer button:disabled { background: #9aa8b6; }
+.chat-empty-state { display: flex; flex: 1; align-items: center; justify-content: center; flex-direction: column; padding: 24px; text-align: center; }
+.chat-empty-state h2 { margin: 12px 0 5px; color: #30465e; font: 700 14px "Manrope", sans-serif; }
+.chat-empty-state p { max-width: 350px; margin: 0; color: #718197; font-size: 10px; line-height: 1.6; }
 .report-icon { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #2770ae; background: #edf5fc; font-weight: 800; }
 .report-icon--sales { color: #31875a; background: #ecf7ef; }
 .report-icon--cash { color: #9b69b4; background: #f6eff9; }
 .report-icon--inventory { color: #bb8424; background: #fff6e5; }
 .report-icon--tasks { color: #328b88; background: #eaf7f6; }
+.metric-card--cash strong { color: #7755a5; }
+.feature-unavailable { display: flex; align-items: flex-start; gap: 12px; padding: 18px; }
+.feature-unavailable h2 { margin: 1px 0 5px; color: #30465e; font: 700 14px "Manrope", sans-serif; }
+.feature-unavailable p { max-width: 680px; margin: 0; color: #718197; font-size: 11px; line-height: 1.65; }
 .report-row-action { min-width: 48px; min-height: 30px; border: 1px solid #e4eaf0; border-radius: 6px; color: #1766ad; background: white; font-size: 9px; font-weight: 700; }
 .report-filters .surface-card__heading h2 { display: flex; align-items: center; gap: 6px; }
 .export-actions { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -155,6 +219,14 @@
 .staff-hero h2 { margin: 7px 0 4px; color: white; font: 700 16px "Manrope", sans-serif; }
 .staff-hero p { margin: 0; color: #cfdeee; font-size: 10px; }
 .staff-hero__icon { width: 46px; height: 46px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.2); border-radius: 13px; color: #e7b849; background: rgba(255,255,255,.08); }
+.staff-shift-counter { display: flex; align-items: center; gap: 12px; padding: 14px; border: 1px solid #e5ebf0; border-radius: 9px; background: #fff; }
+.staff-shift-counter__icon { width: 38px; height: 38px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #66788c; background: #f0f3f6; }
+.staff-shift-counter__icon--active { color: #168255; background: #e8f6ee; }
+.staff-shift-counter__details { display: grid; flex: 1; gap: 3px; min-width: 0; }
+.staff-shift-counter__details small { color: #8290a0; font-size: 9px; font-weight: 700; }
+.staff-shift-counter__details strong { color: #233b54; font: 700 20px "Manrope", sans-serif; font-variant-numeric: tabular-nums; }
+.staff-shift-counter__details span { color: #8290a0; font-size: 9px; }
+.staff-shift-counter .button { min-height: 34px; padding-inline: 10px; white-space: nowrap; }
 .staff-attendance-card { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; }
 .staff-attendance-card__icon { width: 34px; height: 34px; display: grid; flex: 0 0 auto; place-items: center; border-radius: 9px; color: #2e8e5b; background: #eaf7ef; }
 .staff-attendance-card > span:nth-child(2) { flex: 1; }
@@ -164,11 +236,97 @@
 .staff-quick-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .staff-quick-grid button { min-height: 74px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; border: 1px solid #e7edf3; border-radius: 9px; color: #1765a8; background: white; font-size: 9px; font-weight: 700; }
 .staff-quick-grid button:hover { background: #f3f8fd; }
+.sales-catalog { padding: 21px; border: 1px solid #e7edf3; border-radius: 14px; background: white; box-shadow: 0 5px 18px rgba(34, 63, 91, .035); }
+.sales-catalog__heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.sales-catalog__heading h2 { margin: 4px 0 5px; color: #213b57; font: 700 20px "Manrope", sans-serif; }
+.sales-catalog__heading p:not(.eyebrow) { margin: 0; color: #8290a0; font-size: 11px; }
+.sales-catalog__heading .eyebrow { margin: 0; color: #74859a; font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.sales-search { height: 42px; display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 0 12px; border: 1px solid #e3eaf0; border-radius: 9px; color: #8593a2; background: #fbfcfd; }
+.sales-search input { width: 100%; border: 0; outline: 0; color: #33495f; background: transparent; font: inherit; font-size: 11px; }
+.sales-search:focus-within { border-color: #81acd2; box-shadow: 0 0 0 3px rgba(45, 119, 181, .1); }
+.sales-categories { margin: 0 0 15px; }
+.sales-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 13px; }
+.sales-product-card { min-width: 0; overflow: hidden; border: 1px solid #e7edf2; border-radius: 11px; background: #fff; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+.sales-product-card:hover { border-color: #c8d9e8; box-shadow: 0 8px 20px rgba(34, 63, 91, .08); transform: translateY(-2px); }
+.sales-product-card__image { height: 122px; position: relative; display: grid; place-items: center; overflow: hidden; color: #8da4b8; background: linear-gradient(145deg, #f4f7fa, #eaf1f6); }
+.sales-product-card__image img { width: 100%; height: 100%; object-fit: cover; }
+.sales-product-card__placeholder { width: 100%; height: 100%; display: grid; place-items: center; color: #8da4b8; }
+.stock-label { position: absolute; top: 9px; right: 9px; padding: 5px 8px; border-radius: 20px; color: #27784e; background: #e8f6ed; font-size: 8px; font-weight: 700; }
+.stock-label--low { color: #a56e13; background: #fff3d9; }
+.stock-label--empty { color: #a34749; background: #ffeded; }
+.sales-product-card__body { padding: 12px; }
+.sales-product-card__category { color: #8795a5; font-size: 9px; }
+.sales-product-card__body h3 { min-height: 34px; margin: 4px 0 9px; color: #2d4359; font: 700 13px "Manrope", sans-serif; }
+.sales-product-card__details { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-bottom: 11px; }
+.sales-product-card__details strong { color: #1d527f; font-size: 13px; }
+.sales-product-card__details span { color: #8794a2; font-size: 9px; text-align: right; }
+.sales-product-card .button { min-height: 36px; gap: 7px; font-size: 10px; }
+.sales-empty { min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #8b99a8; text-align: center; }
+.sales-empty strong { color: #40566d; font-size: 12px; }
+.sales-empty span { font-size: 10px; }
+.sales-history { margin-top: 17px; }
+.sale-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(16, 31, 49, .58); backdrop-filter: blur(3px); }
+.sale-modal { width: min(100%, 520px); max-height: min(90vh, 760px); overflow-y: auto; padding: 23px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 16px; background: white; box-shadow: 0 25px 80px rgba(13, 32, 51, .28); }
+.sale-modal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 17px; border-bottom: 1px solid #edf1f5; }
+.sale-modal__header .eyebrow { margin: 0; color: #6c8cac; font-size: 9px; font-weight: 700; letter-spacing: .13em; }
+.sale-modal__header h2 { margin: 5px 0; color: #223b55; font: 700 20px "Manrope", sans-serif; }
+.sale-modal__header p { margin: 0; color: #8491a0; font-size: 10px; }
+.sale-modal__header .icon-button { flex: 0 0 auto; border: 1px solid #e7edf2; }
+.sale-modal__items { display: grid; gap: 8px; padding: 16px 0; }
+.sale-modal-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid #edf1f5; border-radius: 10px; background: #fbfcfd; }
+.sale-modal-item__image { width: 43px; height: 43px; flex: 0 0 auto; border-radius: 8px; object-fit: cover; background: #edf2f6; }
+.sale-modal-item__placeholder { display: grid; place-items: center; color: #8299ad; }
+.sale-modal-item__info { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.sale-modal-item__info strong { overflow: hidden; color: #354b62; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-modal-item__info small { color: #8492a1; font-size: 9px; }
+.sale-modal-item__info b { color: #276696; font-size: 10px; }
+.sale-modal-item .quantity-control { gap: 5px; }
+.sale-modal-item .quantity-control button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; }
+.sale-modal__add-item { padding: 12px 0; border-top: 1px solid #edf1f5; }
+.sale-modal__add-item label, .sale-modal__payment { display: grid; gap: 7px; color: #607287; font-size: 10px; font-weight: 600; }
+.sale-modal__add-item > div { display: flex; gap: 8px; margin-top: 7px; }
+.sale-modal__add-item select, .sale-modal__payment select { min-width: 0; min-height: 38px; padding: 0 10px; border: 1px solid #e1e8ee; border-radius: 8px; color: #354a60; background: white; font: inherit; font-size: 10px; }
+.sale-modal__add-item select { flex: 1; }
+.sale-modal__add-item .button { min-height: 38px; }
+.sale-modal__payment { padding: 13px 0; border-top: 1px solid #edf1f5; }
+.sale-modal__total { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding: 15px 0; border-top: 1px solid #edf1f5; color: #596d81; font-size: 11px; }
+.sale-modal__total strong { color: #1e3d5b; font: 700 21px "Manrope", sans-serif; }
+.sale-modal__actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 11px; }
+.sale-modal__actions .button { min-height: 40px; }
+.notification-row--unread { background: #f5f9fd; }
+.notification-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #2c80bd; }
+.notification-read-button { margin-left: auto; }
+.sales-report-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.sales-report-metric { padding: 16px; border: 1px solid #e7edf3; border-radius: 11px; background: linear-gradient(145deg, #fff, #f8fbfd); }
+.sales-report-metric span, .sales-report-metric strong { display: block; }
+.sales-report-metric span { margin-bottom: 8px; color: #8391a0; font-size: 10px; }
+.sales-report-metric strong { color: #213f5c; font: 700 21px "Manrope", sans-serif; }
+.sales-report-chart { min-height: 170px; display: flex; align-items: flex-end; gap: 7px; overflow-x: auto; padding: 18px 4px 3px; border-bottom: 1px solid #e9edf2; }
+.sales-report-bar { min-width: 34px; flex: 1; display: grid; justify-items: center; gap: 7px; }
+.sales-report-bar span { width: min(25px, 75%); min-height: 4px; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #72b5e6, #216da9); }
+.sales-report-bar small { color: #8291a1; font-size: 8px; white-space: nowrap; }
+@media (max-width: 560px) {
+  .sales-catalog { padding: 14px; }
+  .sales-catalog__heading { align-items: flex-start; }
+  .sales-catalog__heading h2 { font-size: 17px; }
+  .sales-catalog__heading .button { min-height: 34px; padding-inline: 8px; white-space: nowrap; }
+  .sales-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .sales-product-card__image { height: 100px; }
+  .sales-product-card__body { padding: 9px; }
+  .sales-product-card__details { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .sales-product-card__details span { text-align: left; }
+  .sale-modal { padding: 17px; }
+  .sale-modal-item { gap: 7px; padding: 8px 6px; }
+  .sale-modal-item__image { width: 36px; height: 36px; }
+  .sale-modal-item .quantity-control { gap: 3px; }
+  .sale-modal-item .quantity-control button { width: 24px; height: 25px; }
+}
 @media (min-width: 701px) {
   .department-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .profile-card .profile-data-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .chat-layout { min-height: 550px; flex-direction: row; }
   .chat-conversations { width: 285px; flex: 0 0 285px; border-right: 1px solid #edf1f5; border-bottom: 0; }
+  .chat-list-scroll { max-height: none; flex: 1; }
   .chat-thread { min-height: 520px; }
 }
 @media (max-width: 390px) {

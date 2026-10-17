@@ -1,86 +1,88 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import type { CurrentUser, Department, DepartmentMember } from "../lib/api";
+import { apiRequest } from "../lib/api";
+import { roleLabel } from "../lib/roles";
 import PageHeading from "../components/PageHeading";
-import PreviewNotice from "../components/PreviewNotice";
 import type { DashboardSection } from "../components/DashboardSidebar";
 import "./../css/OperationsPages.css";
 
-type StaffStatus = "Active" | "On Leave" | "Resigned";
-type StaffRecord = { name: string; role: string; department: string; status: StaffStatus };
+interface StaffRecord extends DepartmentMember {
+  department: string;
+}
 
-const initialStaff: StaffRecord[] = [
-  { name: "Emeka Okafor", role: "Manager", department: "Management", status: "Active" },
-  { name: "Blessing Udo", role: "Cashier", department: "Cashier", status: "Active" },
-  { name: "John Mensah", role: "Store Attendant", department: "Inventory", status: "Active" },
-  { name: "Nengi Eze", role: "Supervisor", department: "Bar", status: "Active" },
-  { name: "David Wilson", role: "Stock Controller", department: "Inventory", status: "On Leave" },
-];
-
-export default function StaffPage({ onNavigate }: { onNavigate: (section: DashboardSection) => void }) {
-  const [staff, setStaff] = useState(initialStaff);
+export default function StaffPage({ user, onNavigate }: { user: CurrentUser; onNavigate: (section: DashboardSection) => void }) {
+  const [staff, setStaff] = useState<StaffRecord[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
-  const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<StaffRecord | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void apiRequest<{ departments: (Department & { members?: DepartmentMember[] })[] }>("/api/v1/admin/departments")
+      .then(({ departments }) => {
+        if (!active) return;
+        const visibleDepartments = user.role === "management_admin" || user.role === "super_admin"
+          ? departments
+          : departments.filter((department) => department.id === user.departmentId);
+        setStaff(visibleDepartments.flatMap((department) =>
+          (department.members ?? []).map((member) => ({ ...member, department: department.name })),
+        ));
+      })
+      .catch((reason: unknown) => {
+        if (active) setError(reason instanceof Error ? reason.message : "We couldn't load department staff.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [user.departmentId, user.role]);
+
   const visibleStaff = useMemo(
     () => staff.filter((person) =>
-      (filter === "All" || person.status === filter) &&
-      `${person.name} ${person.role} ${person.department}`.toLowerCase().includes(query.toLowerCase()),
+      (filter === "All" || (filter === "Active" ? person.isActive : !person.isActive)) &&
+      `${person.name} ${roleLabel(person.role)} ${person.department}`.toLowerCase().includes(query.trim().toLowerCase()),
     ),
     [filter, query, staff],
   );
+  const filters = ["All", "Active", "Inactive"];
 
   return (
     <section className="module-page">
-      <PageHeading title={selected ? "Staff Profile" : "Staff Management"} description={selected ? "Staff profile and assigned department." : "Manage staff profiles, roles and department assignments."} action={!selected ? { label: "Add Staff", onClick: () => setShowForm(true) } : undefined} />
-      <PreviewNotice />
+      <PageHeading
+        title={selected ? "Staff profile" : user.role === "management_admin" ? "Staff directory" : "Department staff"}
+        description={selected ? "Current account and department assignment." : "Staff accounts currently assigned to your department."}
+      />
+      {error && <div className="alert alert--error" role="alert">{error}</div>}
       {selected ? (
         <div className="surface-card staff-profile-card">
-          <button className="icon-link" onClick={() => setSelected(null)}>← Back to staff</button>
-          <div className="staff-profile-summary"><span className="initial-avatar initial-avatar--large">{selected.name.split(" ").map((part) => part[0]).join("")}</span><div><h2>{selected.name}</h2><p>{selected.role} · {selected.department}</p><span className="status-pill">{selected.status}</span></div></div>
-          <div className="profile-data-grid"><div><small>Email</small><strong>{selected.name.toLowerCase().replace(" ", ".")}@flexbar.example</strong></div><div><small>Department</small><strong>{selected.department}</strong></div><div><small>Account role</small><strong>{selected.role}</strong></div></div>
-          <button className="button button--outline" onClick={() => onNavigate("Attendance")}>View attendance history</button>
+          <button className="icon-link" type="button" onClick={() => setSelected(null)}>← Back to staff</button>
+          <div className="staff-profile-summary">
+            <span className="initial-avatar initial-avatar--large">{selected.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+            <div><h2>{selected.name}</h2><p>{roleLabel(selected.role)} · {selected.department}</p><span className={`status-pill${selected.isActive ? "" : " status-pill--neutral"}`}>{selected.isActive ? "Active account" : "Inactive account"}</span></div>
+          </div>
+          <div className="profile-data-grid"><div><small>Department</small><strong>{selected.department}</strong></div><div><small>Account role</small><strong>{roleLabel(selected.role)}</strong></div><div><small>Account status</small><strong>{selected.isActive ? "Active" : "Inactive"}</strong></div></div>
+          <button className="button button--outline" type="button" onClick={() => onNavigate("Attendance")}>Open attendance</button>
         </div>
       ) : (
-        <>
-          <div className="surface-card staff-list-card">
-            <div className="toolbar-row"><label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search staff…" /></label></div>
-            <div className="tab-strip">{["All", "Active", "On Leave", "Resigned"].map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} onClick={() => setFilter(tab)}>{tab}</button>)}</div>
+        <div className="surface-card staff-list-card">
+          <div className="toolbar-row"><label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search staff…" /></label></div>
+          <div className="tab-strip">{filters.map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} type="button" onClick={() => setFilter(tab)}>{tab}</button>)}</div>
+          {loading ? <p className="empty-state">Loading staff directory…</p> : (
             <div className="record-list">
-              {visibleStaff.map((person) => (
-                <button className="record-row record-row--button" key={person.name} onClick={() => setSelected(person)}>
-                  <span className="initial-avatar">{person.name.split(" ").map((part) => part[0]).join("")}</span>
-                  <span className="record-row__main"><strong>{person.name}</strong><small>{person.role} · {person.department}</small></span>
-                  <span className={`status-pill${person.status === "On Leave" ? " status-pill--warning" : person.status === "Resigned" ? " status-pill--danger" : ""}`}>{person.status}</span>
-                </button>
-              ))}
-              {visibleStaff.length === 0 && <p className="empty-state">No staff match this filter.</p>}
+              {visibleStaff.map((person) => <button className="record-row record-row--button" key={person.id} type="button" onClick={() => setSelected(person)}>
+                <span className="initial-avatar">{person.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span>
+                <span className="record-row__main"><strong>{person.name}</strong><small>{roleLabel(person.role)} · {person.department}</small></span>
+                <span className={`status-pill${person.isActive ? "" : " status-pill--neutral"}`}>{person.isActive ? "Active" : "Inactive"}</span>
+              </button>)}
+              {!error && visibleStaff.length === 0 && <p className="empty-state">{staff.length ? "No staff match this filter." : "No staff accounts are assigned to this department yet."}</p>}
             </div>
-          </div>
-          <button className="icon-link" onClick={() => onNavigate("Departments")}>Manage departments →</button>
-        </>
-      )}
-      {showForm && (
-        <div className="preview-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowForm(false); }}>
-          <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="add-staff-title">
-            <div className="preview-modal__heading"><h2 id="add-staff-title">Add staff member</h2><button className="preview-modal__close" onClick={() => setShowForm(false)} aria-label="Close">×</button></div>
-            <form className="form-card" onSubmit={(event) => {
-              event.preventDefault();
-              const values = new FormData(event.currentTarget);
-              const name = String(values.get("name") ?? "").trim();
-              const role = String(values.get("role") ?? "").trim();
-              const department = String(values.get("department") ?? "").trim();
-              if (name && role && department) setStaff((current) => [{ name, role, department, status: "Active" }, ...current]);
-              setShowForm(false);
-            }}>
-              <label>Full name<input name="name" required /></label>
-              <label>Job title<input name="role" required /></label>
-              <label>Department<select name="department"><option>Bar</option><option>Cashier</option><option>Inventory</option><option>Management</option></select></label>
-              <div className="form-actions"><button className="button button--outline" type="button" onClick={() => setShowForm(false)}>Cancel</button><button className="button button--primary" type="submit">Add to preview</button></div>
-            </form>
-          </section>
+          )}
         </div>
       )}
+      {user.role === "super_admin" && <button className="icon-link" type="button" onClick={() => onNavigate("Departments")}>Manage departments →</button>}
     </section>
   );
 }

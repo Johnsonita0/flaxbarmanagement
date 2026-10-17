@@ -20,6 +20,7 @@ import "../css/DashboardSidebar.css";
 
 export type DashboardSection =
   | "Overview"
+  | "Department Hub"
   | "Staff"
   | "Attendance"
   | "Departments"
@@ -37,6 +38,7 @@ export type DashboardSection =
 
 const navigation: { label: DashboardSection; icon: LucideIcon }[] = [
   { label: "Overview", icon: LayoutDashboard },
+  { label: "Department Hub", icon: UsersRound },
   { label: "Staff", icon: UsersRound },
   { label: "Attendance", icon: CalendarCheck },
   { label: "Departments", icon: UserRound },
@@ -55,6 +57,8 @@ const navigation: { label: DashboardSection; icon: LucideIcon }[] = [
 export default function DashboardSidebar({
   activeSection,
   role,
+  salesEnabled,
+  isDepartmentHead,
   open,
   onNavigate,
   onClose,
@@ -62,6 +66,8 @@ export default function DashboardSidebar({
 }: {
   activeSection: DashboardSection;
   role: AppRole;
+  salesEnabled: boolean;
+  isDepartmentHead: boolean;
   open: boolean;
   onNavigate: (section: DashboardSection) => void;
   onClose: () => void;
@@ -82,12 +88,19 @@ export default function DashboardSidebar({
   const sectionsByRole: Record<AppRole, DashboardSection[]> = {
     super_admin: navigation.map(({ label }) => label),
     management_admin: navigation.filter(({ label }) => label !== "Settings").map(({ label }) => label),
-    department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
-    inventory_officer: ["Overview", "Inventory", "Stock Movement", "Tasks", "Reports", "Notifications", "Profile"],
-    cash_sales_officer: ["Overview", "Attendance", "Sales", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
-    staff: ["Overview", "Attendance", "Tasks", "Meeting Room", "Chat", "Notifications", "Profile"],
+    department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
+    inventory_officer: ["Overview", "Inventory", "Stock Movement", "Sales", "Tasks", "Reports", "Notifications", "Profile"],
+    cash_sales_officer: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
+    staff: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Notifications", "Profile"],
   };
-  const allowedSections = sectionsByRole[role];
+  const canBrowseAllSales = role === "super_admin" || role === "management_admin";
+  const allowedSections = [
+    ...sectionsByRole[role],
+    ...(isDepartmentHead ? ["Department Hub" as const] : []),
+  ].filter((section) =>
+    (section !== "Sales" || canBrowseAllSales || salesEnabled) &&
+    (section !== "Department Hub" || isDepartmentHead),
+  );
 
   return (
     <>

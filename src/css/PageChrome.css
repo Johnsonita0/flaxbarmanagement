@@ -3,8 +3,6 @@
 .module-page-heading h1 { margin: 5px 0 4px; color: #142a43; font: 750 22px/1.25 "Manrope", sans-serif; letter-spacing: -.035em; }
 .module-page-heading p:last-child { margin: 0; color: #8793a2; font-size: 11px; line-height: 1.5; }
 .module-heading-action { min-height: 40px; flex: 0 0 auto; padding: 0 12px; font-size: 11px; }
-.preview-notice { display: flex; align-items: flex-start; gap: 8px; padding: 10px 11px; border: 1px solid #e4eaf2; border-radius: 8px; color: #718197; background: #fff; font-size: 10px; line-height: 1.5; }
-.preview-notice svg { flex: 0 0 auto; margin-top: 1px; color: #6286ad; }
 .surface-card { min-width: 0; padding: 14px; border: 1px solid #e7edf3; border-radius: 10px; background: #fff; box-shadow: 0 2px 7px rgba(21, 49, 76, .025); }
 .surface-card__heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .surface-card__heading h2 { margin: 0; color: #30465e; font: 700 13px "Manrope", sans-serif; }

@@ -1,45 +1,221 @@
-import { useState } from "react";
-import { ArrowLeft, ShoppingCart } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
+import type { CurrentUser } from "../lib/api";
+import { apiRequest, getProductImageUrl } from "../lib/api";
+import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
-import PreviewNotice from "../components/PreviewNotice";
 import "./../css/OperationsPages.css";
 
-const products = [
-  { name: "Heineken", price: 1200 },
-  { name: "Coca-Cola", price: 700 },
-  { name: "Chips", price: 500 },
-  { name: "Water", price: 300 },
-];
+interface SalesProduct {
+  id: string;
+  name: string;
+  category: string;
+  stock: number;
+  unit: string;
+  departmentId: string;
+  departmentName: string;
+  price: number;
+  imagePath: string | null;
+}
 
-export default function SalesPage() {
-  const [newSale, setNewSale] = useState(false);
-  const [quantities, setQuantities] = useState<number[]>([0, 0, 0, 0]);
-  const [previewMessage, setPreviewMessage] = useState("");
-  const total = products.reduce((sum, product, index) => sum + product.price * quantities[index], 0);
+interface RecordedSale {
+  id: string;
+  sellerName: string;
+  departmentName: string;
+  paymentMethod: string;
+  total: number;
+  createdAt: string;
+  items: { name: string; quantity: number; total: number }[];
+}
+
+const money = (amount: number) => `₦${amount.toLocaleString()}`;
+
+function ProductPhoto({ imagePath, className }: { imagePath: string | null; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const imageUrl = getProductImageUrl(imagePath);
+  if (!imageUrl || failed) {
+    const placeholderClass = className === "sale-modal-item__image"
+      ? "sale-modal-item__image sale-modal-item__placeholder"
+      : "sales-product-card__placeholder";
+    return <span className={placeholderClass}><Package size={22} aria-hidden="true" /></span>;
+  }
+  return <img className={className} src={imageUrl} alt="" onError={() => setFailed(true)} />;
+}
+
+export default function SalesPage({ user }: { user: CurrentUser }) {
+  const { showToast } = useToast();
+  const [products, setProducts] = useState<SalesProduct[]>([]);
+  const [sales, setSales] = useState<RecordedSale[]>([]);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("All");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [additionalProductId, setAdditionalProductId] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const loadSales = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [catalog, history] = await Promise.all([
+        apiRequest<{ products: SalesProduct[] }>("/api/v1/sales/catalog"),
+        apiRequest<{ sales: RecordedSale[] }>("/api/v1/sales/history"),
+      ]);
+      setProducts(catalog.products);
+      setSales(history.sales);
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "We couldn't load sales.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadSales(); }, [loadSales]);
+
+  const categories = useMemo(
+    () => ["All", ...new Set(products.map((product) => product.category).filter(Boolean))],
+    [products],
+  );
+  const visibleProducts = useMemo(() => products.filter((product) => {
+    const matchesSearch = `${product.name} ${product.category}`.toLowerCase().includes(search.trim().toLowerCase());
+    return matchesSearch && (category === "All" || product.category === category);
+  }), [category, products, search]);
+  const selectedProducts = products.filter((product) => (quantities[product.id] ?? 0) > 0);
+  const total = selectedProducts.reduce((sum, product) => sum + product.price * quantities[product.id], 0);
+
+  function openSale(product: SalesProduct) {
+    setSelectedProductId(product.id);
+    setAdditionalProductId("");
+    setPaymentMethod("cash");
+    setQuantities({ [product.id]: 1 });
+  }
+
+  function closeSale() {
+    if (saving) return;
+    setSelectedProductId(null);
+    setQuantities({});
+    setAdditionalProductId("");
+  }
+
+  function adjustQuantity(product: SalesProduct, difference: number) {
+    setQuantities((current) => {
+      const next = Math.min(product.stock, Math.max(0, (current[product.id] ?? 0) + difference));
+      if (next === 0) {
+        const { [product.id]: _removed, ...remaining } = current;
+        return remaining;
+      }
+      return { ...current, [product.id]: next };
+    });
+  }
+
+  function addAnotherProduct() {
+    const product = products.find((item) => item.id === additionalProductId);
+    if (!product || product.stock < 1) return;
+    setQuantities((current) => ({ ...current, [product.id]: Math.max(1, current[product.id] ?? 0) }));
+    setAdditionalProductId("");
+  }
+
+  async function recordSale() {
+    if (selectedProducts.length === 0) return;
+    setSaving(true);
+    try {
+      const result = await apiRequest<{ message: string }>("/api/v1/sales/sales", {
+        method: "POST",
+        body: JSON.stringify({
+          paymentMethod,
+          items: selectedProducts.map((product) => ({ productId: product.id, quantity: quantities[product.id] })),
+        }),
+      });
+      showToast(result.message, "success");
+      setSelectedProductId(null);
+      setQuantities({});
+      await loadSales();
+    } catch (reason: unknown) {
+      showToast(reason instanceof Error ? reason.message : "We couldn't record this sale.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canSell = user.salesEnabled && user.role !== "super_admin";
+  const departmentName = products.find((product) => product.id === selectedProductId)?.departmentName
+    ?? products[0]?.departmentName
+    ?? "Department catalog";
+  const addableProducts = products.filter((product) =>
+    product.stock > 0 && product.departmentId === user.departmentId && !quantities[product.id],
+  );
 
   return (
     <section className="module-page">
-      <PageHeading title={newSale ? "New Sale" : "Sales"} description={newSale ? "Add items to a sale preview." : "Sales overview by date, staff member and department."} action={!newSale ? { label: "New Sale", onClick: () => { setNewSale(true); setPreviewMessage(""); } } : undefined} />
-      <PreviewNotice />
-      {newSale ? (
-        <div className="surface-card">
-          <button className="icon-link" onClick={() => setNewSale(false)}><ArrowLeft size={15} /> Back to sales</button>
-          <div className="sale-list">{products.map((product, index) => <div className="record-row" key={product.name}><span className="product-token product-token--0"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{product.name}</strong><small>₦{product.price.toLocaleString()} each</small></span><div className="quantity-control"><button aria-label={`Remove one ${product.name}`} onClick={() => setQuantities((values) => values.map((count, i) => i === index ? Math.max(0, count - 1) : count))}>−</button><span>{quantities[index]}</span><button aria-label={`Add one ${product.name}`} onClick={() => setQuantities((values) => values.map((count, i) => i === index ? count + 1 : count))}>+</button></div></div>)}</div>
-          <div className="sale-total"><span>Total</span><strong>₦{total.toLocaleString()}</strong></div>
-          {previewMessage && <div className="alert alert--success" role="status">{previewMessage}</div>}
-          <button className="button button--primary full-width" disabled={total === 0} onClick={() => setPreviewMessage("Sale preview complete. This has not been recorded or charged.")}>Preview sale</button>
-        </div>
-      ) : (
-        <>
-          <div className="tab-strip"><button className="tab-chip tab-chip--active">Today</button><button className="tab-chip">This week</button><button className="tab-chip">This month</button><button className="tab-chip">All time</button></div>
-          <div className="metric-grid"><div className="metric-card"><small>Sales today · sample</small><strong>₦482,500</strong><span className="metric-trend">↑ 12% vs yesterday</span></div><div className="metric-card"><small>Transactions</small><strong>84</strong><span className="metric-trend">Preview figure</span></div></div>
-          <div className="surface-card">
-            <div className="surface-card__heading"><div><h2>Sales activity</h2><p>Sample daily activity · not live data</p></div></div>
-            <div className="bar-chart" aria-label="Sample sales chart">{[45, 68, 54, 78, 61, 88, 72].map((height, index) => <div className="bar-chart__column" key={index}><span style={{ height: `${height}%` }} /><small>{["M", "T", "W", "T", "F", "S", "S"][index]}</small></div>)}</div>
+      <PageHeading title="Sales" description={canSell ? "Choose a product to start a sale. Stock updates as soon as the sale is complete." : "Product catalog and recent sales across enabled departments."} />
+      {error && <div className="alert alert--error" role="alert">{error}</div>}
+
+      {canSell && <section className="sales-catalog" aria-labelledby="sales-catalog-title">
+        <div className="sales-catalog__heading">
+          <div>
+            <p className="eyebrow">{departmentName.toUpperCase()} · SELLING</p>
+            <h2 id="sales-catalog-title">What are you selling?</h2>
+            <p>Pick an item to review the sale and confirm payment.</p>
           </div>
-          <div className="surface-card"><div className="surface-card__heading"><div><h2>Top products</h2><p>Sample sales mix</p></div><button>View report</button></div>{products.slice(0, 3).map((product, index) => <div className="record-row" key={product.name}><span className="rank-number">{index + 1}</span><span className="record-row__main"><strong>{product.name}</strong><small>Bar · Sample total</small></span><strong className="record-row__meta">₦{(product.price * 24).toLocaleString()}</strong></div>)}</div>
-        </>
-      )}
+          <button className="button button--outline" type="button" onClick={() => void loadSales()} disabled={loading}>Refresh stock</button>
+        </div>
+        <label className="sales-search"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products…" aria-label="Search products" /></label>
+        {categories.length > 1 && <div className="tab-strip sales-categories" aria-label="Product categories">
+          {categories.map((item) => <button className={`tab-chip${category === item ? " tab-chip--active" : ""}`} key={item} type="button" onClick={() => setCategory(item)}>{item}</button>)}
+        </div>}
+        {loading ? <p className="empty-state">Loading products…</p> : visibleProducts.length === 0
+          ? <div className="sales-empty"><Package size={24} /><strong>{products.length ? "No products match your search." : "No products are ready to sell yet."}</strong><span>{products.length ? "Try another product name or category." : "Ask your manager to assign products to your department."}</span></div>
+          : <div className="sales-product-grid">{visibleProducts.map((product) => {
+            const lowStock = product.stock > 0 && product.stock <= 5;
+            const availableToSell = canSell && product.departmentId === user.departmentId;
+            return <article className="sales-product-card" key={product.id}>
+              <div className="sales-product-card__image">
+                <ProductPhoto imagePath={product.imagePath} />
+                <span className={`stock-label${product.stock === 0 ? " stock-label--empty" : lowStock ? " stock-label--low" : ""}`}>
+                  {product.stock === 0 ? "Out of stock" : lowStock ? "Low stock" : "In stock"}
+                </span>
+              </div>
+              <div className="sales-product-card__body">
+                <span className="sales-product-card__category">{product.category}</span>
+                <h3>{product.name}</h3>
+                <div className="sales-product-card__details"><strong>{money(product.price)}</strong><span>{product.stock} {product.unit} available</span></div>
+                <button className="button button--primary full-width" type="button" disabled={product.stock < 1 || loading || !availableToSell} onClick={() => openSale(product)}>
+                  <ShoppingCart size={15} /> {product.stock < 1 ? "Unavailable" : availableToSell ? "Sell" : "View only"}
+                </button>
+              </div>
+            </article>;
+          })}</div>}
+      </section>}
+
+      <div className="surface-card sales-history">
+        <div className="surface-card__heading"><div><h2>Recent sales</h2><p>Latest completed transactions</p></div><span className="status-pill status-pill--neutral">{sales.length}</span></div>
+        {loading ? <p className="empty-state">Loading sales…</p> : sales.length === 0 ? <p className="empty-state">No sales recorded yet.</p> : sales.map((sale) => <div className="record-row" key={sale.id}><span className="product-token"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{sale.departmentName} · {sale.sellerName}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.createdAt))} · {sale.paymentMethod} · {sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</small></span><strong className="record-row__meta">{money(sale.total)}</strong></div>)}
+      </div>
+
+      {selectedProductId && <div className="sale-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSale(); }}>
+        <section className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-modal-title">
+          <header className="sale-modal__header">
+            <div><span className="eyebrow">NEW TRANSACTION</span><h2 id="sale-modal-title">Complete sale</h2><p>Check the items and payment before confirming.</p></div>
+            <button className="icon-button" type="button" aria-label="Close sale" onClick={closeSale} disabled={saving}><X size={19} /></button>
+          </header>
+          <div className="sale-modal__items">
+            {selectedProducts.map((product) => {
+              return <div className="sale-modal-item" key={product.id}>
+                <ProductPhoto imagePath={product.imagePath} className="sale-modal-item__image" />
+                <div className="sale-modal-item__info"><strong>{product.name}</strong><small>{money(product.price)} each · {product.stock} available</small><b>{money(product.price * quantities[product.id])}</b></div>
+                <div className="quantity-control"><button type="button" aria-label={`Remove one ${product.name}`} disabled={saving} onClick={() => adjustQuantity(product, -1)}><Minus size={14} /></button><span>{quantities[product.id]}</span><button type="button" aria-label={`Add one ${product.name}`} disabled={saving || quantities[product.id] >= product.stock} onClick={() => adjustQuantity(product, 1)}><Plus size={14} /></button></div>
+              </div>;
+            })}
+          </div>
+          {addableProducts.length > 0 && <div className="sale-modal__add-item"><label htmlFor="sale-add-product">Add another item</label><div><select id="sale-add-product" value={additionalProductId} onChange={(event) => setAdditionalProductId(event.target.value)}><option value="">Choose a product</option>{addableProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {money(product.price)}</option>)}</select><button className="button button--outline" type="button" disabled={!additionalProductId} onClick={addAnotherProduct}>Add</button></div></div>}
+          <label className="sale-modal__payment">Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} disabled={saving}><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option></select></label>
+          <div className="sale-modal__total"><span>Total to collect</span><strong>{money(total)}</strong></div>
+          <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Cancel</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
+        </section>
+      </div>}
     </section>
   );
 }

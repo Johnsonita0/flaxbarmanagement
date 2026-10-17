@@ -76,7 +76,9 @@ export default function AppRouter() {
     } = supabase.auth.onAuthStateChange(
       (event: AuthChangeEvent, nextSession: Session | null) => {
         if (!mounted) return;
-        setSession(nextSession);
+        setSession((currentSession) =>
+          currentSession?.user.id === nextSession?.user.id ? currentSession : nextSession,
+        );
         setReturningUser(Boolean(nextSession));
         if (event === "PASSWORD_RECOVERY") {
           setAuthView("reset-password");
@@ -93,7 +95,9 @@ export default function AppRouter() {
     void supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
       if (error) showToast(authFeedback(error, "We couldn't check your sign-in. Please try again."), "error");
-      setSession(data.session);
+      setSession((currentSession) =>
+        currentSession?.user.id === data.session?.user.id ? currentSession : data.session,
+      );
       setReturningUser(Boolean(data.session));
       if (new URLSearchParams(window.location.search).get("invite") === "1" && data.session) {
         setPasswordSetupRequired(true);
@@ -124,7 +128,8 @@ export default function AppRouter() {
     }
 
     let mounted = true;
-    setProfileLoading(true);
+    const hasVerifiedUser = user?.id === session.user.id;
+    if (!hasVerifiedUser) setProfileLoading(true);
     setProfileError("");
     void fetchCurrentUser(session)
       .then((currentUser) => {
@@ -132,15 +137,18 @@ export default function AppRouter() {
       })
       .catch((reason: unknown) => {
         if (mounted) {
-          setProfileError(
-            reason instanceof Error && !(reason instanceof TypeError)
-              ? reason.message
-              : "We couldn't connect to your workspace. Check your connection or contact your administrator.",
-          );
+          const message = reason instanceof Error && !(reason instanceof TypeError)
+            ? reason.message
+            : "We couldn't connect to your workspace. Check your connection or contact your administrator.";
+          if (hasVerifiedUser) {
+            console.error("Background account refresh failed; keeping the current workspace available.", reason);
+          } else {
+            setProfileError(message);
+          }
         }
       })
       .finally(() => {
-        if (mounted) setProfileLoading(false);
+        if (mounted && !hasVerifiedUser) setProfileLoading(false);
       });
 
     return () => {
