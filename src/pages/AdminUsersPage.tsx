@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Archive, ChevronDown, KeyRound, MailPlus, RefreshCw, RotateCcw, Save, ShieldCheck, Trash2, UserRoundPlus } from "lucide-react";
+import { Archive, ChevronDown, KeyRound, RefreshCw, RotateCcw, Save, ShieldCheck, Trash2, UserRoundPlus } from "lucide-react";
 import { adminRequest, assignableRoles } from "../lib/api";
 import type { Department, ManagedUser } from "../lib/api";
 import { roleLabel } from "../lib/roles";
@@ -61,6 +61,12 @@ export default function AdminUsersPage() {
     const form = event.currentTarget;
     setInviteBusy(true);
     const values = new FormData(form);
+    const password = String(values.get("password") ?? "");
+    if (password !== String(values.get("confirmPassword") ?? "")) {
+      showToast("The passwords do not match.", "error");
+      setInviteBusy(false);
+      return;
+    }
     try {
       const result = await adminRequest<{ message: string }>("/users", {
         method: "POST",
@@ -69,6 +75,7 @@ export default function AdminUsersPage() {
           email: String(values.get("email") ?? "").trim(),
           role: String(values.get("role") ?? "staff"),
           departmentId: String(values.get("departmentId") ?? "") || null,
+          password,
         }),
       });
       showToast(result.message, "success");
@@ -157,11 +164,11 @@ export default function AdminUsersPage() {
       <PageHeading
         title="Staff & access management"
         description="Manage staff accounts, assignments, and access. Administrator accounts are kept separate."
-        action={{ label: "Invite user", onClick: () => setShowInvite(true) }}
+        action={{ label: "Register staff", onClick: () => setShowInvite(true) }}
       />
       <div className="admin-callout">
         <ShieldCheck size={18} />
-        <p><strong>Administrator controls</strong><span>Administrator accounts are not staff records. New staff receive an email invitation to securely set their password.</span></p>
+        <p><strong>Administrator controls</strong><span>Administrator accounts are managed separately. Set each staff member’s initial password during registration and share it securely.</span></p>
       </div>
       <div className="admin-list-heading">
         <div><h2>Staff accounts</h2><p>{users.length} accounts</p></div>
@@ -234,7 +241,7 @@ export default function AdminUsersPage() {
       {showInvite && (
         <div className="preview-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !inviteBusy) setShowInvite(false); }}>
           <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="invite-user-title">
-            <div className="preview-modal__heading"><h2 id="invite-user-title">Invite a team member</h2><button className="preview-modal__close" type="button" onClick={() => setShowInvite(false)} aria-label="Close" disabled={inviteBusy}>×</button></div>
+            <div className="preview-modal__heading"><h2 id="invite-user-title">Register staff member</h2><button className="preview-modal__close" type="button" onClick={() => setShowInvite(false)} aria-label="Close" disabled={inviteBusy}>×</button></div>
             <form className="form-card" onSubmit={(event) => void inviteUser(event)}>
               <label>Starter assignment
                 <select defaultValue="" onChange={applyStarterAssignment}>
@@ -244,10 +251,12 @@ export default function AdminUsersPage() {
               </label>
               <label>Full name<input name="displayName" required minLength={2} maxLength={100} autoComplete="name" /></label>
               <label>Work email<input name="email" type="email" required autoComplete="email" /></label>
+              <label>Initial password<input name="password" type="password" required minLength={8} maxLength={128} autoComplete="new-password" /></label>
+              <label>Confirm password<input name="confirmPassword" type="password" required minLength={8} maxLength={128} autoComplete="new-password" /></label>
               <label>Role<select name="role" defaultValue="staff">{assignableRoles.map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}</select></label>
               <label>Department<select name="departmentId" defaultValue=""><option value="">No department</option>{departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}</select></label>
-              <p className="admin-form-note"><MailPlus size={15} /> We’ll email a secure invitation so they can create their password.</p>
-              <div className="form-actions"><button className="button button--outline" type="button" onClick={() => setShowInvite(false)} disabled={inviteBusy}>Cancel</button><button className="button button--primary" type="submit" disabled={inviteBusy}><UserRoundPlus size={16} />{inviteBusy ? "Sending…" : "Send invitation"}</button></div>
+              <p className="admin-form-note"><KeyRound size={15} /> Use at least 8 characters and share the password with the staff member securely.</p>
+              <div className="form-actions"><button className="button button--outline" type="button" onClick={() => setShowInvite(false)} disabled={inviteBusy}>Cancel</button><button className="button button--primary" type="submit" disabled={inviteBusy}><UserRoundPlus size={16} />{inviteBusy ? "Creating…" : "Create staff account"}</button></div>
             </form>
           </section>
         </div>

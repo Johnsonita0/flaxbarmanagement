@@ -55,6 +55,23 @@ export interface ManagedUser {
   departmentName: string | null;
 }
 
+export interface InventoryProduct {
+  id: string;
+  name: string;
+  category: string;
+  stock: number;
+  unit: string;
+  reorder: number;
+  imagePath: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getProductImageUrl(imagePath: string | null): string | null {
+  if (!supabase || !imagePath) return null;
+  return supabase.storage.from("product-images").getPublicUrl(imagePath).data.publicUrl;
+}
+
 export const assignableRoles: Exclude<AppRole, "super_admin">[] = [
   "management_admin",
   "department_supervisor",

@@ -12,6 +12,12 @@ import LockPinGate from "./LockPinGate";
 
 type AuthView = "sign-in" | "forgot-password" | "reset-password";
 
+function passwordRecoveryRedirectUrl() {
+  const redirect = new URL("/", window.location.origin);
+  redirect.searchParams.set("password_reset", "1");
+  return redirect.toString();
+}
+
 function authFeedback(error: unknown, fallback: string) {
   let code = "";
   let message = error instanceof Error ? error.message.toLowerCase() : "";
@@ -173,7 +179,7 @@ export default function AppRouter() {
     if (!supabase) return;
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: passwordRecoveryRedirectUrl(),
       });
       if (error) {
         showToast(authFeedback(error, "We couldn't send the reset link. Please try again."), "error");
@@ -228,7 +234,7 @@ export default function AppRouter() {
   async function requestPasswordReset(email: string) {
     if (!supabase) throw new Error("Password reset is temporarily unavailable. Please contact your administrator.");
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin,
+      redirectTo: passwordRecoveryRedirectUrl(),
     });
     if (error) throw new Error(authFeedback(error, "We couldn't send the reset link. Please try again."));
   }
