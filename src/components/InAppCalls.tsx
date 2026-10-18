@@ -152,6 +152,15 @@ function CallRoom({
           throw new Error("Your sign-in session changed. Reload the app and try the call again.");
         }
         await supabase.realtime.setAuth(session.access_token);
+        const { data: canAccessRoom, error: authorizationError } = await supabase.rpc("can_access_call_topic", {
+          p_topic: `call:${callId}`,
+        });
+        if (authorizationError) {
+          throw new Error(`Could not verify call-room authorization: ${authorizationError.message}`);
+        }
+        if (canAccessRoom !== true) {
+          throw new Error("The database call-room authorization check denied this signed-in account for this call.");
+        }
         const room = await apiRequest<CallRoomDetails>(`/api/v1/calls/${callId}`);
         if (cancelled) return;
         setDetails(room);

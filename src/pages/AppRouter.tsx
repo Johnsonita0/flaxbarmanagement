@@ -213,7 +213,7 @@ export default function AppRouter() {
     if (!session || !deviceSessionReady || deviceSessionError) return;
     let reportedFailure = false;
     const heartbeat = () => {
-      void apiRequest("/api/v1/session/heartbeat")
+      void apiRequest("/api/v1/session/heartbeat", { method: "POST" })
         .then(() => { reportedFailure = false; })
         .catch((error: unknown) => {
           if (!reportedFailure) console.error("Could not refresh the active account device session.", error);
