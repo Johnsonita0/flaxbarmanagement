@@ -326,6 +326,37 @@ function CallRoom({
     };
   }, [callId, closeResources, user.id]);
 
+  useEffect(() => {
+    if (!details?.call.isCaller) return;
+    let stopped = false;
+    let checking = false;
+    let reportedStatusError = false;
+    const checkCallStatus = async () => {
+      if (stopped || checking) return;
+      checking = true;
+      try {
+        await apiRequest<CallRoomDetails>(`/api/v1/calls/${callId}`);
+        reportedStatusError = false;
+      } catch (statusError: unknown) {
+        if (stopped) return;
+        if (statusError instanceof Error && statusError.message === "This call has ended or its invitation expired.") {
+          closeResources();
+          onClose();
+        } else if (!reportedStatusError) {
+          console.error("Could not check the outgoing call status.", statusError);
+          reportedStatusError = true;
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    const interval = window.setInterval(() => void checkCallStatus(), 2500);
+    return () => {
+      stopped = true;
+      window.clearInterval(interval);
+    };
+  }, [callId, closeResources, details?.call.isCaller, onClose]);
+
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access requires a supported browser over HTTPS.");
