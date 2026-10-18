@@ -67,6 +67,20 @@ function shortName(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("") || "?";
 }
 
+function getRealtimeErrorDetail(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const details = ["message", "code", "reason", "status"]
+      .flatMap((key) => {
+        const value = Reflect.get(error, key);
+        return typeof value === "string" ? [`${key}: ${value}`] : [];
+      });
+    if (details.length) return details.join(" · ");
+  }
+  return "Supabase Realtime returned no error details.";
+}
+
 function CallVideo({ stream, muted = false }: { stream: MediaStream | null; muted?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -284,7 +298,7 @@ function CallRoom({
               console.error("In-app call Realtime channel failed to connect.", { status, error: subscriptionError });
               if (mountedRef.current) {
                 setJoining(false);
-                setError("The call service rejected the secure room connection. Verify the Realtime messages grants and participant policies, then reload and retry.");
+                setError(`Call room connection failed (${status}): ${getRealtimeErrorDetail(subscriptionError)}. Check the Supabase Realtime connection and participant policies.`);
               }
             }
           });
