@@ -131,6 +131,11 @@ function CallRoom({
     async function connect() {
       try {
         if (!supabase) throw new Error("Calls require the app's secure sign-in connection.");
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !session || session.user.id !== user.id) {
+          throw new Error("Your sign-in session changed. Reload the app and try the call again.");
+        }
+        await supabase.realtime.setAuth(session.access_token);
         const room = await apiRequest<CallRoomDetails>(`/api/v1/calls/${callId}`);
         if (cancelled) return;
         setDetails(room);
@@ -257,7 +262,7 @@ function CallRoom({
             closeResources();
             onClose();
           })
-          .subscribe(async (status) => {
+          .subscribe(async (status, subscriptionError) => {
             if (status === "SUBSCRIBED") {
               try {
                 const presenceStatus = await channel.track({ userId: user.id, name: room.user.name, role: room.user.role });
@@ -270,14 +275,14 @@ function CallRoom({
                 console.error("Could not join the secure in-app call room.", presenceError);
                 if (mountedRef.current) {
                   setJoining(false);
-                  setError("The secure call room could not connect. Ask your administrator to apply the in-app call policy repair migration.");
+                  setError("The secure call room rejected your connection. Check the network and call-room authorization policies, then retry.");
                 }
               }
             } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-              console.error("In-app call Realtime channel failed to connect.", status);
+              console.error("In-app call Realtime channel failed to connect.", { status, error: subscriptionError });
               if (mountedRef.current) {
                 setJoining(false);
-                setError("The secure call room could not connect. Check your connection and ask your administrator to apply the in-app call policy repair migration.");
+                setError("The secure call room could not connect. Check your network and call-room authorization policies, then reload and retry.");
               }
             }
           });
