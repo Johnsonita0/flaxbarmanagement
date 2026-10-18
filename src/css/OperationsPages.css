@@ -320,6 +320,12 @@
 .notification-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px; }
 .notification-actions .button { min-height: 34px; font-size: 9px; }
 .notification-device-status { color: #708197; font-size: 9px; }
+.notification-push-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 13px; padding-top: 12px; border-top: 1px solid #edf1f5; }
+.notification-push-setting > div { min-width: 0; }
+.notification-push-setting strong, .notification-push-setting small { display: block; }
+.notification-push-setting strong { color: #40566c; font-size: 10px; }
+.notification-push-setting small { margin-top: 4px; color: #8190a0; font-size: 9px; line-height: 1.5; }
+.notification-push-setting .button { min-height: 34px; flex: 0 0 auto; font-size: 9px; }
 .notification-read-button { margin-left: 0; }
 .sales-report-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
 .sales-report-metric { padding: 16px; border: 1px solid #e7edf3; border-radius: 11px; background: linear-gradient(145deg, #fff, #f8fbfd); }
@@ -333,6 +339,7 @@
 @media (max-width: 560px) {
   .notification-controls { align-items: stretch; flex-direction: column; }
   .notification-actions { justify-content: space-between; }
+  .notification-push-setting { align-items: flex-start; flex-direction: column; }
   .sales-catalog { padding: 14px; }
   .sales-catalog__heading { align-items: flex-start; }
   .sales-catalog__heading h2 { font-size: 17px; }

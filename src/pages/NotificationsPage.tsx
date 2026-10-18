@@ -17,6 +17,18 @@ interface WorkspaceNotification {
   readAt: string | null;
 }
 
+interface CallPushConfig {
+  enabled: boolean;
+  publicKey: string | null;
+  subscribed: boolean;
+}
+
+function getApplicationServerKey(value: string) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
+  return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+}
+
 function notificationCategory(type: string) {
   return type.split(/[_\s-]+/).filter(Boolean).map((part) => part[0].toLocaleUpperCase() + part.slice(1)).join(" ") || "Updates";
 }
@@ -40,6 +52,13 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
   const [saving, setSaving] = useState(false);
   const [openingNotificationId, setOpeningNotificationId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [callPushConfig, setCallPushConfig] = useState<CallPushConfig | null>(null);
+  const [callPushSaving, setCallPushSaving] = useState(false);
+  const callPushSupported = typeof window !== "undefined"
+    && window.isSecureContext
+    && "Notification" in window
+    && "PushManager" in window
+    && "serviceWorker" in navigator;
   const [devicePermission, setDevicePermission] = useState<NotificationPermission | null>(
     () => typeof window !== "undefined" && "Notification" in window ? Notification.permission : null,
   );
@@ -63,6 +82,17 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
     window.addEventListener("flexbar:notification", onNewNotification);
     return () => window.removeEventListener("flexbar:notification", onNewNotification);
   }, [loadNotifications]);
+
+  useEffect(() => {
+    if (!callPushSupported) return;
+    let active = true;
+    void apiRequest<CallPushConfig>("/api/v1/call-push/config")
+      .then((config) => { if (active) setCallPushConfig(config); })
+      .catch((reason: unknown) => {
+        if (active) showToast(reason instanceof Error ? reason.message : "Call alert settings could not be loaded.", "error");
+      });
+    return () => { active = false; };
+  }, [callPushSupported, showToast]);
 
   const categories = useMemo(
     () => [...new Set(notifications.map((notification) => notificationCategory(notification.type)))].sort(),
@@ -105,6 +135,53 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
     }
   }
 
+  async function toggleCallAlerts() {
+    if (!callPushConfig) return;
+    setCallPushSaving(true);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      if (!registration) throw new Error("Call alerts are available after opening the deployed Flex Bar app.");
+      const subscription = await registration.pushManager.getSubscription();
+      if (callPushConfig.subscribed) {
+        await apiRequest("/api/v1/call-push/subscription", {
+          method: "DELETE",
+          body: JSON.stringify(subscription ? { endpoint: subscription.endpoint } : {}),
+        });
+        if (subscription) await subscription.unsubscribe();
+        setCallPushConfig({ ...callPushConfig, subscribed: false });
+        showToast("Incoming call alerts are disabled on this device.", "success");
+        return;
+      }
+
+      if (!callPushConfig.enabled || !callPushConfig.publicKey) {
+        throw new Error("Call alerts are not configured yet. Please contact your administrator.");
+      }
+      let permission = Notification.permission;
+      if (permission === "default") permission = await Notification.requestPermission();
+      setDevicePermission(permission);
+      if (permission !== "granted") throw new Error("Allow notifications in your browser settings to enable call alerts.");
+
+      const activeSubscription = subscription ?? await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: getApplicationServerKey(callPushConfig.publicKey),
+      });
+      const serialized = activeSubscription.toJSON();
+      if (!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth) {
+        throw new Error("Your browser returned an incomplete push subscription. Please try again.");
+      }
+      await apiRequest("/api/v1/call-push/subscription", {
+        method: "POST",
+        body: JSON.stringify({ endpoint: serialized.endpoint, keys: serialized.keys }),
+      });
+      setCallPushConfig({ ...callPushConfig, subscribed: true });
+      showToast("Incoming call alerts are enabled on this device.", "success");
+    } catch (reason: unknown) {
+      showToast(reason instanceof Error ? reason.message : "Call alerts could not be updated.", "error");
+    } finally {
+      setCallPushSaving(false);
+    }
+  }
+
   async function markAllRead() {
     setSaving(true);
     try {
@@ -142,6 +219,21 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
               : <span className="notification-device-status">Device alerts are not supported by this browser</span>}
             {unreadCount > 0 && <button className="icon-link notification-read-button" type="button" disabled={saving} onClick={() => void markAllRead()}><CircleCheck size={15} />{saving ? "Updating…" : "Mark all as read"}</button>}
           </div>
+        </div>
+        <div className="notification-push-setting">
+          <div>
+            <strong>Incoming call alerts</strong>
+            <small>Get a browser alert when a colleague calls, including while Flex Bar is closed.</small>
+          </div>
+          {!callPushSupported
+            ? <span className="notification-device-status">Push alerts are not supported in this browser</span>
+            : !callPushConfig
+              ? <span className="notification-device-status">Loading call alert settings…</span>
+              : !callPushConfig.enabled
+                ? <span className="notification-device-status">Call alerts are not configured</span>
+                : <button className="button button--outline" type="button" disabled={callPushSaving} onClick={() => void toggleCallAlerts()}>
+                  <Bell size={14} />{callPushSaving ? "Updating…" : callPushConfig.subscribed ? "Disable call alerts" : "Enable call alerts"}
+                </button>}
         </div>
       </div>
       <div className="surface-card record-list">

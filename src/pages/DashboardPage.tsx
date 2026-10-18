@@ -4,12 +4,14 @@ import {
   CalendarCheck,
   ChartNoAxesCombined,
   ClipboardList,
+  Download,
   LockKeyhole,
   MessageSquare,
   Package,
   ShieldCheck,
   UsersRound,
   Wine,
+  X,
 } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
@@ -43,6 +45,19 @@ import { useInAppCalls } from "../components/InAppCalls";
 import "../css/DashboardPage.css";
 
 const AdminUsersPage = lazy(() => import("./AdminUsersPage"));
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+}
+
+function hasDismissedInstallPrompt(userId: string) {
+  try {
+    return window.sessionStorage.getItem(`flexbar:install-prompt-dismissed:${userId}`) === "true";
+  } catch {
+    return false;
+  }
+}
 
 const modules = [
   { section: "Staff", title: "Staff & departments", description: "People and team structure", accent: "blue", icon: UsersRound },
@@ -107,6 +122,13 @@ export default function DashboardPage({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installHelp, setInstallHelp] = useState("");
+  const [installPromptDismissed, setInstallPromptDismissed] = useState(() => hasDismissedInstallPrompt(user.id));
+  const [pwaInstalled, setPwaInstalled] = useState(() =>
+    window.matchMedia("(display-mode: standalone)").matches
+      || ("standalone" in navigator && navigator.standalone === true),
+  );
   const [isDepartmentHead, setIsDepartmentHead] = useState(false);
   const [departmentAccessLoaded, setDepartmentAccessLoaded] = useState(false);
   const name = user.displayName?.trim() || user.email?.split("@")[0] || "Flex Bar user";
@@ -131,6 +153,29 @@ export default function DashboardPage({
     setActionError("");
   }
 
+  async function installPwa() {
+    if (!installPrompt) {
+      const isAppleMobile = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      setInstallHelp(isAppleMobile
+        ? "Tap Share in Safari, then choose Add to Home Screen."
+        : "Open your browser menu and choose Install app or Add to Home Screen.");
+      return;
+    }
+    await installPrompt.prompt();
+    const choice = await installPrompt.userChoice;
+    setInstallPrompt(null);
+    if (choice.outcome === "accepted") setInstallHelp("Flex Bar is being installed.");
+  }
+
+  function dismissInstallPrompt() {
+    try {
+      window.sessionStorage.setItem(`flexbar:install-prompt-dismissed:${user.id}`, "true");
+    } catch {
+      setActionError("This browser could not remember that the install prompt was closed.");
+    }
+    setInstallPromptDismissed(true);
+  }
+
   async function signOutAfterEndingCall() {
     try {
       await endActiveCall();
@@ -150,7 +195,42 @@ export default function DashboardPage({
   }, [activeSection, user.id]);
 
   useEffect(() => {
+    const displayMode = window.matchMedia("(display-mode: standalone)");
+    const updateInstalledState = () => setPwaInstalled(
+      displayMode.matches || ("standalone" in navigator && navigator.standalone === true),
+    );
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as BeforeInstallPromptEvent);
+    };
+    const handleAppInstalled = () => {
+      setPwaInstalled(true);
+      setInstallPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+    displayMode.addEventListener("change", updateInstalledState);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+      displayMode.removeEventListener("change", updateInstalledState);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
+    const launchUrl = new URL(window.location.href);
+    const launchNotificationId = launchUrl.searchParams.get("notificationId");
+    if (launchNotificationId) {
+      const launchNotificationType = launchUrl.searchParams.get("notificationType") ?? "unknown";
+      navigate(getNotificationSection(launchNotificationType));
+      void apiRequest(`/api/v1/sales/notifications/${launchNotificationId}/read`, { method: "PATCH" })
+        .then(() => window.dispatchEvent(new Event("flexbar:notification-read")))
+        .catch((error: unknown) => console.error("Could not mark the opened notification as read.", error));
+      launchUrl.searchParams.delete("notificationId");
+      launchUrl.searchParams.delete("notificationType");
+      window.history.replaceState(null, "", `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+    }
     const handleWorkerMessage = (event: MessageEvent<{ type?: string; notificationId?: unknown; notificationType?: unknown }>) => {
       if (event.data?.type !== "flexbar:open-notification") return;
       const notificationId = typeof event.data.notificationId === "string" ? event.data.notificationId : null;
@@ -223,15 +303,17 @@ export default function DashboardPage({
           void (async () => {
             try {
               const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined;
+              const pushSubscription = await registration?.pushManager.getSubscription();
+              if (pushSubscription) return;
               if (registration) {
                 await registration.showNotification(title, {
                   body,
-                  icon: "/flexbar-icon.svg",
+                  icon: "/icons/flexbar-192.png",
                   tag,
                   data: { url: "/", notificationId: row.id, notificationType },
                 });
               } else {
-                new Notification(title, { body, icon: "/flexbar-icon.svg", tag });
+                new Notification(title, { body, icon: "/icons/flexbar-192.png", tag });
               }
             } catch (error: unknown) {
               console.error("Could not show a device notification.", error);
@@ -302,6 +384,19 @@ export default function DashboardPage({
         onSignOut={() => void signOutAfterEndingCall()}
       />
       <div className="workspace">
+        {!pwaInstalled && !installPromptDismissed && <aside className="pwa-install-prompt" aria-label="Install Flex Bar">
+          <span className="pwa-install-prompt__icon"><Download size={17} /></span>
+          <div className="pwa-install-prompt__copy">
+            <strong>Install Flex Bar</strong>
+            <span>{installHelp || "Add Flex Bar to your device for quick access and call alerts."}</span>
+          </div>
+          <button type="button" onClick={() => void installPwa()}>
+            {installPrompt ? "Install" : "How to install"}
+          </button>
+          <button className="pwa-install-prompt__close" type="button" onClick={dismissInstallPrompt} aria-label="Close install prompt" title="Close install prompt">
+            <X size={16} />
+          </button>
+        </aside>}
         <DashboardHeader
           section={activeSection}
           companyName={user.companyName}

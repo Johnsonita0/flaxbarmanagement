@@ -578,7 +578,7 @@ function CallRoom({
         <header className="call-window__header">
           <div className="call-window__identity">
             <strong>{remoteName}</strong>
-            <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Calling…" : "Waiting for answer…"}</small>
+            <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Ringing…" : "Waiting for answer…"}</small>
           </div>
           <div className="call-window__header-actions">
             <span className="call-window__secure">🔒 End-to-end private</span>
@@ -635,7 +635,7 @@ function CallRoom({
                 large
               />
               <strong>{details?.call.isCaller ? `Calling ${remoteName}` : "Connecting your call"}</strong>
-              <small>{joining ? "Securing connection…" : "Waiting for them to answer…"}</small>
+              <small>{joining ? "Securing connection…" : "Ringing…"}</small>
             </div>
           )}
           {localVideoTrack && !cameraOff && (
@@ -785,11 +785,16 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
         requestRunning = false;
       }
     };
+    const handleWorkerMessage = (event: MessageEvent<{ type?: string }>) => {
+      if (event.data?.type === "flexbar:incoming-call") void checkCalls();
+    };
+    navigator.serviceWorker?.addEventListener("message", handleWorkerMessage);
     void checkCalls();
     const interval = window.setInterval(() => void checkCalls(), 4000);
     return () => {
       stopped = true;
       window.clearInterval(interval);
+      navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
     };
   }, [activeCallId]);
 

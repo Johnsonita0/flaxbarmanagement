@@ -24,6 +24,8 @@ New company owners can register from the standalone `/signup` route. It is inten
 
 ## Vercel
 
+Push alerts require the backend's `20261021_call_push_subscriptions.sql` migration, backend-only `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `PUSH_WEBHOOK_SECRET` settings, plus a Supabase Database Webhook on `public.notifications` inserts. Users enable alerts per device from Notifications; once enabled, incoming calls and all workspace notification inserts can alert while the installed PWA is closed. The installer, browser notification, and app icons use the shipped Flex Bar logo.
+
 Create a Vercel project connected to the frontend Git repository and set its Root Directory to `frontend`. Set `VITE_SUPABASE_URL`, either `VITE_SUPABASE_PUBLISHABLE_KEY` or `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` in Vercel project settings. Set `VITE_API_BASE_URL` to the deployed backend's origin, for example `https://your-api-domain.vercel.app`; do not include a port or `/api/v1`, since the frontend adds API paths itself. This value is required for production builds; `localhost:3000` is used only by the local Vite development server. After setting or changing it, redeploy the frontend.
 
 On the backend Vercel project, set `FRONTEND_URL` to the deployed frontend URL and include that exact origin in `FRONTEND_ORIGINS` (for example, `https://your-frontend-domain.vercel.app`). Add any production custom domain origins there too, separated by commas, then redeploy the backend. The frontend and backend must use their actual deployed URLs; local ports are only for local development.

@@ -21,19 +21,55 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data?.json() ?? {};
+  } catch {
+    payload = {};
+  }
+  const data = payload && typeof payload === "object" ? payload : {};
+  const title = typeof data.title === "string" ? data.title : "Flex Bar call";
+  const body = typeof data.body === "string" ? data.body : "You have an incoming call.";
+  const callId = typeof data.callId === "string" ? data.callId : null;
+  const notificationId = typeof data.notificationId === "string" ? data.notificationId : null;
+  event.waitUntil(self.registration.showNotification(title, {
+    body,
+    icon: "/icons/flexbar-192.png",
+    tag: callId
+      ? `flexbar-call-${callId}`
+      : notificationId ? `flexbar-notification-${notificationId}` : "flexbar-notification",
+    data: {
+      type: data.type === "incoming-call" ? "incoming-call" : "workspace-notification",
+      callId,
+      notificationId,
+      notificationType: typeof data.notificationType === "string" ? data.notificationType : "unknown",
+      mediaMode: data.mediaMode === "video" ? "video" : "audio",
+      url: typeof data.url === "string" ? data.url : "/",
+    },
+  }));
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
-  const targetUrl = data.url || "/";
+  const target = new URL(data.url || "/", self.location.origin);
+  if (data.type !== "incoming-call" && typeof data.notificationId === "string") {
+    target.searchParams.set("notificationId", data.notificationId);
+    target.searchParams.set("notificationType", typeof data.notificationType === "string" ? data.notificationType : "unknown");
+  }
+  const targetUrl = `${target.pathname}${target.search}${target.hash}`;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const appClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
       if (appClient) {
-        appClient.postMessage({
-          type: "flexbar:open-notification",
-          notificationId: data.notificationId,
-          notificationType: data.notificationType,
-        });
+        appClient.postMessage(data.type === "incoming-call"
+          ? { type: "flexbar:incoming-call", callId: data.callId }
+          : {
+            type: "flexbar:open-notification",
+            notificationId: data.notificationId,
+            notificationType: data.notificationType,
+          });
         return appClient.focus();
       }
       return self.clients.openWindow(targetUrl);
