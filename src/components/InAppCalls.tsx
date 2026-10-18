@@ -570,6 +570,7 @@ function CallRoom({
     ?? "Calling";
   const callDuration = `${Math.floor(callSeconds / 60).toString().padStart(2, "0")}:${(callSeconds % 60).toString().padStart(2, "0")}`;
   const soloCall = participants.length <= 1;
+  const localVideoTrack = localStream?.getVideoTracks().find((track) => track.readyState === "live" && track.enabled);
 
   return (
     <div className={`call-overlay${minimized ? " call-overlay--minimized" : ""}`} role="dialog" aria-modal={!minimized} aria-label="In-app call">
@@ -637,11 +638,12 @@ function CallRoom({
               <small>{joining ? "Securing connection…" : "Waiting for them to answer…"}</small>
             </div>
           )}
-          <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}`}>
-            {!cameraOff && <CallVideo stream={localStream} muted />}
-            {cameraOff && <CallAvatar name={user.displayName ?? user.email ?? "You"} avatarPath={user.avatarPath} />}
-            <strong>You</strong>
-          </article>
+          {localVideoTrack && !cameraOff && (
+            <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}`}>
+              <CallVideo stream={localStream} muted />
+              <strong>You</strong>
+            </article>
+          )}
         </div>
         <footer className="call-window__controls">
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
