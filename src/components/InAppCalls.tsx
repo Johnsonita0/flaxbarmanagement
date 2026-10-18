@@ -11,6 +11,8 @@ type MediaMode = "audio" | "video";
 interface CallInvitation {
   id: string;
   callerName: string;
+  callerPosition: "Admin" | "Manager" | "Staff";
+  callerAvatarPath: string | null;
   mediaMode: MediaMode;
   createdAt: string;
 }
@@ -818,9 +820,9 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
       {children}
       {incoming && !activeCallId && (
         <div className="call-incoming" role="dialog" aria-modal="true" aria-label="Incoming call">
-          <div className="call-incoming__avatar">{shortName(incoming.callerName)}</div>
+          <IncomingCallerAvatar name={incoming.callerName} avatarPath={incoming.callerAvatarPath} />
           <strong>{incoming.callerName} is calling</strong>
-          <span>{incoming.mediaMode === "video" ? "Video call" : "Voice call"}</span>
+          <span>{incoming.callerPosition} · {incoming.mediaMode === "video" ? "Video call" : "Voice call"}</span>
           <div className="call-incoming__actions">
             <button className="button button--danger" type="button" onClick={() => void decline(incoming)}><PhoneOff size={17} />Decline</button>
             <button className="button button--primary" type="button" onClick={() => void answer(incoming)}><Phone size={17} />Answer</button>
@@ -830,5 +832,17 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
       {activeCallId && <CallRoom callId={activeCallId} user={user} onClose={() => setActiveCallId(null)} onFinishError={setCallError} onRegisterFinish={registerFinishCall} />}
       {callError && <div className="call-toast" role="alert">{callError}<button type="button" onClick={() => setCallError("")} aria-label="Dismiss call error">×</button></div>}
     </CallsContext.Provider>
+  );
+}
+
+function IncomingCallerAvatar({ name, avatarPath }: { name: string; avatarPath: string | null }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const photoUrl = avatarPath ? getProfilePhotoUrl(avatarPath) : null;
+  return (
+    <div className="call-incoming__avatar">
+      {photoUrl && !photoFailed
+        ? <img src={photoUrl} alt="" onError={() => setPhotoFailed(true)} />
+        : shortName(name)}
+    </div>
   );
 }

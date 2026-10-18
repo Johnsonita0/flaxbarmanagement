@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, MessageCircle, Phone, Search, Send, Video, X } from "lucide-react";
+import { Check, CheckCheck, MessageCircle, Phone, PhoneOff, Search, Send, Video, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import PageHeading from "../components/PageHeading";
 import { useToast } from "../components/ToastProvider";
@@ -62,6 +62,11 @@ function formatTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function getMissedCallMode(body: string): "audio" | "video" | null {
+  const match = /^__flexbar_missed_call__:(audio|video):[0-9a-f-]{36}$/i.exec(body);
+  return match?.[1] === "audio" || match?.[1] === "video" ? match[1] : null;
 }
 
 export default function ChatPage({ user }: { user: CurrentUser }) {
@@ -448,7 +453,14 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 {!messagesLoading && !messages.length && <p className="empty-state">This is the start of your conversation with {activeConversation.peer.name}.</p>}
                 {messages.map((message) => (
                   <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                    <p>{message.body}</p>
+                    {getMissedCallMode(message.body) ? (
+                      <div className="chat-missed-call">
+                        <p><PhoneOff size={14} />Missed {getMissedCallMode(message.body) === "video" ? "video" : "voice"} call</p>
+                        <button type="button" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], getMissedCallMode(message.body) ?? "audio")}>
+                          <Phone size={13} />Call back
+                        </button>
+                      </div>
+                    ) : <p>{message.body}</p>}
                     <div className="chat-bubble__meta">
                       <time>{formatTime(message.createdAt)}</time>
                       {message.fromMe && (message.deliveredAt
