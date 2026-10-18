@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { CurrentUser } from "../lib/api";
 import { apiRequest, claimDeviceSession, fetchCurrentUser, releaseDeviceSession } from "../lib/api";
@@ -62,6 +62,7 @@ export default function AppRouter() {
   const [deviceSessionError, setDeviceSessionError] = useState("");
   const [deviceSessionRetry, setDeviceSessionRetry] = useState(0);
   const [roleConfirmed, setRoleConfirmed] = useState(false);
+  const signInInProgress = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setSplashComplete(true), 10_000);
@@ -138,25 +139,28 @@ export default function AppRouter() {
     let mounted = true;
     setDeviceSessionReady(false);
     setDeviceSessionError("");
+    if (signInInProgress.current) return () => { mounted = false; };
     void claimDeviceSession(session).then((claimed) => {
       if (!mounted) return;
-      if (claimed) {
-        setDeviceSessionReady(true);
+      if (!claimed) {
+        showToast("This account is already active on another device. Sign in here to replace that session.", "error");
+        void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
+          if (!error) return;
+          console.error("Could not clear the device session that could not be claimed.", error);
+          if (mounted) {
+            setDeviceSessionError("This account is active on another device. Sign in again here to replace its session.");
+            setDeviceSessionReady(true);
+          }
+        }).catch((error: unknown) => {
+          console.error("Could not clear the device session that could not be claimed.", error);
+          if (mounted) {
+            setDeviceSessionError("This account is active on another device. Sign in again here to replace its session.");
+            setDeviceSessionReady(true);
+          }
+        });
         return;
       }
-      showToast("This account is already signed in on another device. Sign out there before trying again.", "error");
-      void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
-        if (!error || !mounted) return;
-        console.error("Could not clear the blocked device's local sign-in.", error);
-        setDeviceSessionError("This account is already active on another device. Sign out there, or try again after its inactive session expires.");
-        setDeviceSessionReady(true);
-      }).catch((error: unknown) => {
-        console.error("Could not clear the blocked device's local sign-in.", error);
-        if (mounted) {
-          setDeviceSessionError("This account is already active on another device. Sign out there, or try again after its inactive session expires.");
-          setDeviceSessionReady(true);
-        }
-      });
+      setDeviceSessionReady(true);
     }).catch((error: unknown) => {
       console.error("Could not verify the active account device.", error);
       if (mounted) {
@@ -216,8 +220,14 @@ export default function AppRouter() {
           reportedFailure = true;
         });
     };
-    const interval = window.setInterval(heartbeat, 60_000);
-    return () => window.clearInterval(interval);
+    const interval = window.setInterval(heartbeat, 10_000);
+    window.addEventListener("focus", heartbeat);
+    document.addEventListener("visibilitychange", heartbeat);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", heartbeat);
+      document.removeEventListener("visibilitychange", heartbeat);
+    };
   }, [session, deviceSessionReady, deviceSessionError]);
 
   useEffect(() => {
@@ -249,10 +259,28 @@ export default function AppRouter() {
 
   async function signIn(email: string, password: string) {
     if (!supabase) return;
+    signInInProgress.current = true;
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) showToast(authFeedback(error, "We couldn't sign you in. Please try again."), "error");
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        signInInProgress.current = false;
+        showToast(authFeedback(error, "We couldn't sign you in. Please try again."), "error");
+        return;
+      }
+      if (!data.session) {
+        signInInProgress.current = false;
+        showToast("Your sign-in was accepted, but this device session could not be loaded. Please try again.", "error");
+        return;
+      }
+      const claimed = await claimDeviceSession(data.session, true);
+      signInInProgress.current = false;
+      if (!claimed) throw new Error("The new device session could not replace the previous sign-in.");
+      setDeviceSessionError("");
+      setDeviceSessionReady(true);
     } catch (error: unknown) {
+      signInInProgress.current = false;
+      setDeviceSessionError(error instanceof Error ? error.message : "We couldn't verify this device.");
+      setDeviceSessionReady(true);
       showToast(authFeedback(error, "We couldn't sign you in. Please try again."), "error");
     }
   }
@@ -328,7 +356,7 @@ export default function AppRouter() {
       setPasswordSetupRequired(false);
       showToast(
         releaseError
-          ? "Your password was updated and this device signed out. Another device may need to wait up to 15 minutes before signing in."
+          ? "Your password was updated and this device signed out, but the previous device session could not be released immediately."
           : "Your password has been updated. Sign in with your new password.",
         releaseError ? "error" : "success",
       );
@@ -350,7 +378,7 @@ export default function AppRouter() {
       }
       if (releaseError) {
         console.error("The active device session could not be released during sign-out.", releaseError);
-        showToast("You were signed out, but another device may need to wait up to 15 minutes before signing in.", "error");
+        showToast("You were signed out, but the previous device session could not be released immediately.", "error");
       }
     } catch (error: unknown) {
       showToast(authFeedback(error, "We couldn't sign you out. Please try again."), "error");

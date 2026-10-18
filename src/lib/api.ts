@@ -103,6 +103,7 @@ export const assignableRoles: Exclude<AppRole, "super_admin">[] = [
 async function requestAccountSession(
   path: string,
   session: Session,
+  requestBody?: Record<string, boolean>,
 ): Promise<{ response: Response; body: { code?: string; error?: string } | null }> {
   let response: Response;
   try {
@@ -111,7 +112,9 @@ async function requestAccountSession(
       headers: {
         Authorization: `Bearer ${session.access_token}`,
         Accept: "application/json",
+        ...(requestBody ? { "Content-Type": "application/json" } : {}),
       },
+      ...(requestBody ? { body: JSON.stringify(requestBody) } : {}),
     });
   } catch {
     throw new Error("We couldn't reach the workspace to verify this device.");
@@ -120,8 +123,12 @@ async function requestAccountSession(
   return { response, body };
 }
 
-export async function claimDeviceSession(session: Session): Promise<boolean> {
-  const { response, body } = await requestAccountSession("/api/v1/session/claim", session);
+export async function claimDeviceSession(session: Session, replaceExisting = false): Promise<boolean> {
+  const { response, body } = await requestAccountSession(
+    "/api/v1/session/claim",
+    session,
+    replaceExisting ? { replaceExisting: true } : undefined,
+  );
   if (response.status === 409 && body?.code === "ACCOUNT_ALREADY_ACTIVE") return false;
   if (!response.ok) throw new Error(body?.error ?? "We couldn't verify this device. Please try again.");
   return true;
