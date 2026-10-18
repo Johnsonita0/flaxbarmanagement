@@ -368,7 +368,6 @@ function CallRoom({
   }, [callId, closeResources, user.id]);
 
   useEffect(() => {
-    if (!details?.call.isCaller) return;
     let stopped = false;
     let checking = false;
     let reportedStatusError = false;
@@ -396,7 +395,7 @@ function CallRoom({
       stopped = true;
       window.clearInterval(interval);
     };
-  }, [callId, closeResources, details?.call.isCaller, onClose]);
+  }, [callId, closeResources, onClose]);
 
   useEffect(() => {
     if (!showInvitePicker) return;
@@ -424,6 +423,7 @@ function CallRoom({
     ...participants.map((participant) => participant.userId),
   ]);
   const availableInviteSlots = Math.max(0, 8 - currentParticipantIds.size);
+  const isGroupCall = currentParticipantIds.size > 2;
   const filteredInvitePeople = invitePeople.filter((person) =>
     !currentParticipantIds.has(person.id)
     && `${person.name} ${person.departmentName} ${person.role}`.toLocaleLowerCase().includes(inviteSearch.trim().toLocaleLowerCase()));
@@ -533,20 +533,8 @@ function CallRoom({
     if (finishingRef.current) return;
     finishingRef.current = true;
     try {
-      if (details?.call.isCaller && channelRef.current) {
-        try {
-          const result = await channelRef.current.send({
-            type: "broadcast",
-            event: "call-ended",
-            payload: { callId },
-          });
-          if (result !== "ok") console.error("Could not notify call participants that the call ended.", result);
-        } catch (broadcastError: unknown) {
-          console.error("Could not broadcast call end.", broadcastError);
-        }
-      }
       try {
-        await apiRequest(`/api/v1/calls/${callId}/${details?.call.isCaller ? "end" : "leave"}`, { method: "PATCH" });
+        await apiRequest(`/api/v1/calls/${callId}/${isGroupCall ? "leave" : "end"}`, { method: "PATCH" });
       } catch (finishError: unknown) {
         console.error("Could not close the active call cleanly.", finishError);
         onFinishError(finishError instanceof Error ? finishError.message : "The call could not be ended on the server.");
@@ -562,7 +550,7 @@ function CallRoom({
       onClose();
       finishingRef.current = false;
     }
-  }, [callId, closeResources, details?.call.isCaller, onClose, onFinishError]);
+  }, [callId, closeResources, isGroupCall, onClose, onFinishError]);
 
   useEffect(() => {
     onRegisterFinish(finishCall);
@@ -657,7 +645,7 @@ function CallRoom({
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
           <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={() => setSpeakerMuted((value) => !value)} aria-label={speakerMuted ? "Turn speaker on" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>
           <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Start video" : "Stop video"}</small></button>
-          <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={details?.call.isCaller ? "End call for everyone" : "Leave call"}><span><PhoneOff size={21} /></span><small>{details?.call.isCaller ? "End call" : "Leave call"}</small></button>
+          <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={isGroupCall ? "Leave group call" : "End call for everyone"}><span><PhoneOff size={21} /></span><small>{isGroupCall ? "Leave call" : "End call"}</small></button>
         </footer>
       </section>
       {showInvitePicker && (
