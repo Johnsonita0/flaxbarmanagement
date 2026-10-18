@@ -284,7 +284,7 @@ function CallRoom({
               console.error("In-app call Realtime channel failed to connect.", { status, error: subscriptionError });
               if (mountedRef.current) {
                 setJoining(false);
-                setError("The secure call room could not connect. Check your network and call-room authorization policies, then reload and retry.");
+                setError("The call service rejected the secure room connection. Verify the Realtime messages grants and participant policies, then reload and retry.");
               }
             }
           });
