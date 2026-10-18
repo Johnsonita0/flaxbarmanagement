@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
+import { Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import type { AppRole, CurrentUser } from "../lib/api";
+import { getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import "../css/InAppCalls.css";
@@ -43,6 +43,7 @@ interface CallPresence {
   userId: string;
   name: string;
   role: AppRole;
+  avatarPath: string | null;
 }
 
 interface CallsContextValue {
@@ -89,6 +90,22 @@ function CallVideo({ stream, muted = false }: { stream: MediaStream | null; mute
   return <video ref={ref} autoPlay playsInline muted={muted} />;
 }
 
+function CallAvatar({ name, avatarPath, large = false }: { name: string; avatarPath: string | null; large?: boolean }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const photoUrl = avatarPath ? getProfilePhotoUrl(avatarPath) : null;
+  if (photoUrl && !photoFailed) {
+    return (
+      <img
+        className={`call-tile__avatar-photo${large ? " call-tile__avatar-photo--large" : ""}`}
+        src={photoUrl}
+        alt={`${name}'s profile`}
+        onError={() => setPhotoFailed(true)}
+      />
+    );
+  }
+  return <span className={`call-tile__avatar${large ? " call-tile__avatar--large" : ""}`}>{shortName(name)}</span>;
+}
+
 function CallRoom({
   callId,
   user,
@@ -111,6 +128,7 @@ function CallRoom({
   const [callSeconds, setCallSeconds] = useState(0);
   const [joining, setJoining] = useState(true);
   const [error, setError] = useState("");
+  const [minimized, setMinimized] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
@@ -290,7 +308,12 @@ function CallRoom({
           .subscribe(async (status, subscriptionError) => {
             if (status === "SUBSCRIBED") {
               try {
-                const presenceStatus = await channel.track({ userId: user.id, name: room.user.name, role: room.user.role });
+                const presenceStatus = await channel.track({
+                  userId: user.id,
+                  name: room.user.name,
+                  role: room.user.role,
+                  avatarPath: room.user.avatarPath,
+                });
                 if (presenceStatus !== "ok") throw new Error("Call presence could not be announced.");
                 if (mountedRef.current) {
                   setJoining(false);
@@ -476,14 +499,23 @@ function CallRoom({
   const soloCall = participants.length <= 1;
 
   return (
-    <div className="call-overlay" role="dialog" aria-modal="true" aria-label="In-app call">
-      <section className={`call-window${soloCall ? " call-window--solo" : ""}`}>
+    <div className={`call-overlay${minimized ? " call-overlay--minimized" : ""}`} role="dialog" aria-modal={!minimized} aria-label="In-app call">
+      <section className={`call-window${soloCall ? " call-window--solo" : ""}${minimized ? " call-window--minimized" : ""}`}>
         <header className="call-window__header">
           <div className="call-window__identity">
             <strong>{remoteName}</strong>
             <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Calling…" : "Waiting for answer…"}</small>
           </div>
           <span className="call-window__secure">🔒 End-to-end private</span>
+          <button
+            className="call-window__minimize"
+            type="button"
+            onClick={() => setMinimized((current) => !current)}
+            aria-label={minimized ? "Restore call" : "Minimize call"}
+            title={minimized ? "Restore call" : "Minimize call"}
+          >
+            {minimized ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
+          </button>
         </header>
         {error && <div className="alert alert--error" role="alert">{error}</div>}
         <div className={`call-window__tiles${soloCall ? " call-window__tiles--solo" : ""}`}>
@@ -494,7 +526,11 @@ function CallRoom({
               <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}`} key={participant.userId}>
                 {hasVideo
                   ? <CallVideo stream={remote ?? null} muted />
-                  : <span className="call-tile__avatar call-tile__avatar--large">{shortName(participant.name)}</span>}
+                  : <CallAvatar
+                    name={participant.name}
+                    avatarPath={participant.avatarPath ?? details?.participants.find((person) => person.id === participant.userId)?.avatarPath ?? null}
+                    large
+                  />}
                 <audio autoPlay muted={speakerMuted} ref={(node) => { if (node) node.srcObject = remote ?? null; }} />
                 <strong><span className="call-tile__audio-indicator" />{participant.name}</strong>
               </article>
@@ -502,21 +538,25 @@ function CallRoom({
           })}
           {!participants.length && (
             <div className="call-window__waiting">
-              <span className="call-window__waiting-avatar">{shortName(remoteName)}</span>
+              <CallAvatar
+                name={remoteName}
+                avatarPath={details?.participants.find((participant) => participant.id !== user.id)?.avatarPath ?? null}
+                large
+              />
               <strong>{details?.call.isCaller ? `Calling ${remoteName}` : "Connecting your call"}</strong>
               <small>{joining ? "Securing connection…" : "Waiting for them to answer…"}</small>
             </div>
           )}
           <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}`}>
             {!cameraOff && <CallVideo stream={localStream} muted />}
-            {cameraOff && <span className="call-tile__avatar">{shortName(user.displayName ?? user.email ?? "You")}</span>}
+            {cameraOff && <CallAvatar name={user.displayName ?? user.email ?? "You"} avatarPath={user.avatarPath} />}
             <strong>You</strong>
           </article>
         </div>
         <footer className="call-window__controls">
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
           <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={() => setSpeakerMuted((value) => !value)} aria-label={speakerMuted ? "Turn speaker on" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>
-          <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Turn camera on" : "Turn camera off"}><span>{cameraOff ? <VideoOff size={21} /> : <Video size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Camera off" : "Camera"}</small></button>
+          <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Start video" : "Stop video"}</small></button>
           <button className="call-control call-control--end" type="button" onClick={() => void finishCall().catch(() => {})} aria-label="End call"><span><PhoneOff size={21} /></span><small>End</small></button>
         </footer>
       </section>

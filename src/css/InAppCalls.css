@@ -35,6 +35,8 @@
 .call-window__identity strong { color: #f5fbfa; font-size: 16px; font-weight: 650; letter-spacing: .01em; }
 .call-window__identity small { color: #bad0cc; font-size: 12px; font-variant-numeric: tabular-nums; }
 .call-window__secure { position: absolute; top: 8px; right: 0; color: #8eaaa4; font-size: 10px; }
+.call-window__minimize { position: absolute; top: 0; left: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(239, 255, 250, .18); border-radius: 50%; color: #eef7f5; background: #29443f; cursor: pointer; }
+.call-window__minimize:hover { background: #35564f; }
 .call-window > .alert { z-index: 3; width: min(700px, 100%); align-self: center; margin: 8px auto; }
 .call-window__tiles {
   position: relative;
@@ -112,6 +114,8 @@
   font-weight: 650;
   box-shadow: 0 0 0 10px rgba(115, 201, 178, .06);
 }
+.call-tile__avatar-photo { width: 72px; height: 72px; flex: 0 0 auto; border: 2px solid rgba(225, 250, 243, .48); border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 10px rgba(115, 201, 178, .06); }
+.call-tile__avatar-photo--large { width: clamp(90px, 12vw, 138px); height: clamp(90px, 12vw, 138px); }
 .call-tile__avatar--large { width: clamp(90px, 12vw, 138px); height: clamp(90px, 12vw, 138px); font-size: clamp(27px, 4vw, 42px); }
 .call-tile__audio-indicator { width: 7px; height: 7px; border-radius: 50%; background: #5de0a1; box-shadow: 0 0 9px rgba(93, 224, 161, .9); }
 .call-window__waiting {
@@ -181,6 +185,21 @@
 .call-control--end > span { width: 62px; height: 54px; border: 0; border-radius: 30px; background: #e5484d; }
 .call-control--end:hover > span { background: #f15b5f; }
 .call-control--end small { color: #f3c9c8; }
+.call-overlay--minimized { inset: auto 16px 16px auto; width: min(390px, calc(100vw - 32px)); height: auto; display: block; padding: 0; background: transparent; pointer-events: none; }
+.call-window--minimized { width: 100%; height: auto; min-height: 0; gap: 0; padding: 10px 12px; border: 1px solid rgba(222, 246, 240, .2); border-radius: 14px; background: #102d2a; box-shadow: 0 12px 38px rgba(0, 0, 0, .38); pointer-events: auto; }
+.call-window--minimized .call-window__header { min-height: 36px; justify-content: flex-start; padding-left: 42px; }
+.call-window--minimized .call-window__identity { align-items: flex-start; margin: 0; text-align: left; }
+.call-window--minimized .call-window__identity strong { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.call-window--minimized .call-window__identity small { font-size: 11px; }
+.call-window--minimized .call-window__secure { display: none; }
+.call-window--minimized .call-window__minimize { width: 32px; height: 32px; }
+.call-window--minimized .call-window__tiles { display: none; }
+.call-window--minimized > .alert { width: 100%; margin: 6px 0 0; padding: 8px; font-size: 10px; }
+.call-window--minimized .call-window__controls { justify-content: flex-end; gap: 12px; padding: 8px 0 0; }
+.call-window--minimized .call-control { min-width: 40px; gap: 3px; }
+.call-window--minimized .call-control > span,
+.call-window--minimized .call-control--end > span { width: 38px; height: 38px; }
+.call-window--minimized .call-control small { font-size: 8px; }
 .call-incoming {
   position: fixed;
   z-index: 1300;
@@ -217,6 +236,8 @@
   .call-control > span { width: 49px; height: 49px; }
   .call-control--end > span { width: 58px; height: 49px; }
   .call-control small { font-size: 9px; }
+  .call-overlay--minimized { right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: min(350px, calc(100vw - 20px)); }
+  .call-window--minimized { padding: 9px 10px; }
 }
 @media (max-height: 560px) and (min-width: 601px) {
   .call-window { padding-top: 10px; padding-bottom: 8px; }
