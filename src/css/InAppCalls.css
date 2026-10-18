@@ -34,9 +34,13 @@
 .call-window__identity { display: flex; align-items: center; flex-direction: column; gap: 5px; margin: 0 auto; text-align: center; }
 .call-window__identity strong { color: #f5fbfa; font-size: 16px; font-weight: 650; letter-spacing: .01em; }
 .call-window__identity small { color: #bad0cc; font-size: 12px; font-variant-numeric: tabular-nums; }
-.call-window__secure { position: absolute; top: 8px; right: 0; color: #8eaaa4; font-size: 10px; }
+.call-window__header-actions { position: absolute; top: 0; right: 0; display: flex; align-items: center; gap: 12px; }
+.call-window__secure { color: #8eaaa4; font-size: 10px; }
 .call-window__minimize { position: absolute; top: 0; left: 0; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(239, 255, 250, .18); border-radius: 50%; color: #eef7f5; background: #29443f; cursor: pointer; }
 .call-window__minimize:hover { background: #35564f; }
+.call-window__invite { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 12px; border: 1px solid rgba(239, 255, 250, .18); border-radius: 20px; color: #eef7f5; background: #29443f; font-size: 11px; cursor: pointer; }
+.call-window__invite:hover { background: #35564f; }
+.call-window__invite:disabled { cursor: wait; opacity: .55; }
 .call-window > .alert { z-index: 3; width: min(700px, 100%); align-self: center; margin: 8px auto; }
 .call-window__tiles {
   position: relative;
@@ -185,13 +189,40 @@
 .call-control--end > span { width: 62px; height: 54px; border: 0; border-radius: 30px; background: #e5484d; }
 .call-control--end:hover > span { background: #f15b5f; }
 .call-control--end small { color: #f3c9c8; }
+.call-invite-backdrop { position: fixed; z-index: 1350; inset: 0; display: grid; place-items: center; padding: 18px; background: rgba(1, 12, 11, .72); backdrop-filter: blur(5px); }
+.call-invite-dialog { width: min(440px, 100%); max-height: min(680px, calc(100dvh - 36px)); display: flex; flex-direction: column; overflow: hidden; border: 1px solid rgba(221, 244, 238, .18); border-radius: 18px; color: #eff8f6; background: #102d2a; box-shadow: 0 24px 70px rgba(0, 0, 0, .48); }
+.call-invite-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 18px 12px; }
+.call-invite-dialog__header h2 { margin: 0; font-size: 17px; font-weight: 650; }
+.call-invite-dialog__header p { margin: 5px 0 0; color: #adc7c1; font-size: 11px; }
+.call-invite-dialog__header > button { width: 34px; height: 34px; display: grid; place-items: center; border: 0; border-radius: 50%; color: #e3efec; background: #29443f; cursor: pointer; }
+.call-invite-search { min-height: 42px; display: flex; align-items: center; gap: 9px; margin: 0 18px 10px; padding: 0 12px; border: 1px solid rgba(222, 246, 240, .18); border-radius: 10px; color: #adc7c1; background: #0a211f; }
+.call-invite-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: #f3faf8; background: transparent; font: inherit; font-size: 12px; }
+.call-invite-search input::placeholder { color: #91aaa5; }
+.call-invite-message { margin: 0 18px 8px; font-size: 11px; }
+.call-invite-message--error { color: #ffaaa8; }
+.call-invite-message--success { color: #80e0b3; }
+.call-invite-list { min-height: 120px; overflow: auto; padding: 0 10px; }
+.call-invite-person { width: 100%; min-height: 58px; display: flex; align-items: center; gap: 11px; padding: 7px 9px; border: 0; border-radius: 10px; color: #eff8f6; text-align: left; background: transparent; cursor: pointer; }
+.call-invite-person:hover, .call-invite-person--selected { background: rgba(108, 181, 162, .14); }
+.call-invite-person:disabled { cursor: not-allowed; opacity: .45; }
+.call-invite-person .call-tile__avatar, .call-invite-person .call-tile__avatar-photo { width: 40px; height: 40px; flex: 0 0 40px; border-width: 1px; box-shadow: none; font-size: 14px; }
+.call-invite-person__identity { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.call-invite-person__identity strong { overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.call-invite-person__identity small { color: #a9c3bd; font-size: 10px; }
+.call-invite-person__check { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid rgba(227, 245, 239, .3); border-radius: 50%; color: #06241b; }
+.call-invite-person--selected .call-invite-person__check { border-color: #67d5a2; background: #67d5a2; }
+.call-invite-empty { margin: 0; padding: 22px 10px; color: #adc7c1; text-align: center; font-size: 11px; }
+.call-invite-dialog__actions { display: flex; justify-content: flex-end; gap: 9px; padding: 13px 18px 16px; border-top: 1px solid rgba(222, 246, 240, .1); }
+.call-invite-dialog__actions button { min-height: 38px; padding: 0 14px; border: 1px solid rgba(239, 255, 250, .18); border-radius: 9px; color: #eef7f5; background: #29443f; font: inherit; font-size: 11px; cursor: pointer; }
+.call-invite-dialog__actions .call-invite-submit { border-color: #15885e; background: #16845e; }
+.call-invite-dialog__actions button:disabled { cursor: wait; opacity: .55; }
 .call-overlay--minimized { inset: auto 16px 16px auto; width: min(390px, calc(100vw - 32px)); height: auto; display: block; padding: 0; background: transparent; pointer-events: none; }
 .call-window--minimized { width: 100%; height: auto; min-height: 0; gap: 0; padding: 10px 12px; border: 1px solid rgba(222, 246, 240, .2); border-radius: 14px; background: #102d2a; box-shadow: 0 12px 38px rgba(0, 0, 0, .38); pointer-events: auto; }
 .call-window--minimized .call-window__header { min-height: 36px; justify-content: flex-start; padding-left: 42px; }
 .call-window--minimized .call-window__identity { align-items: flex-start; margin: 0; text-align: left; }
 .call-window--minimized .call-window__identity strong { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .call-window--minimized .call-window__identity small { font-size: 11px; }
-.call-window--minimized .call-window__secure { display: none; }
+.call-window--minimized .call-window__header-actions { display: none; }
 .call-window--minimized .call-window__minimize { width: 32px; height: 32px; }
 .call-window--minimized .call-window__tiles { display: none; }
 .call-window--minimized > .alert { width: 100%; margin: 6px 0 0; padding: 8px; font-size: 10px; }
@@ -226,7 +257,9 @@
   .call-window { padding: max(16px, env(safe-area-inset-top)) 14px max(16px, env(safe-area-inset-bottom)); }
   .call-window__header { min-height: 50px; }
   .call-window__identity strong { font-size: 15px; }
-  .call-window__secure { top: 3px; right: 0; font-size: 8px; }
+  .call-window__header-actions { gap: 7px; }
+  .call-window__secure { font-size: 8px; }
+  .call-window__invite { min-height: 32px; gap: 5px; padding: 0 9px; font-size: 9px; }
   .call-window__tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(145px, 1fr); gap: 8px; padding: 8px 0 12px; }
   .call-tile { min-height: 145px; border-radius: 12px; }
   .call-tile--hero { min-height: 0; height: 100%; border-radius: 16px; }

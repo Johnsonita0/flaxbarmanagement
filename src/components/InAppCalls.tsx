@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
+import { Check, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Search, UserPlus, Video, VideoOff, Volume2, VolumeX, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
@@ -21,6 +21,14 @@ interface CallUser {
   role: AppRole;
   avatarPath: string | null;
   status: "ringing" | "joined";
+}
+
+interface CallInvitePerson {
+  id: string;
+  name: string;
+  role: AppRole;
+  avatarPath: string | null;
+  departmentName: string;
 }
 
 interface CallRoomDetails {
@@ -110,11 +118,13 @@ function CallRoom({
   callId,
   user,
   onClose,
+  onFinishError,
   onRegisterFinish,
 }: {
   callId: string;
   user: CurrentUser;
   onClose: () => void;
+  onFinishError: (message: string) => void;
   onRegisterFinish: (finish: (() => Promise<void>) | null) => void;
 }) {
   const [details, setDetails] = useState<CallRoomDetails | null>(null);
@@ -129,6 +139,14 @@ function CallRoom({
   const [joining, setJoining] = useState(true);
   const [error, setError] = useState("");
   const [minimized, setMinimized] = useState(false);
+  const [showInvitePicker, setShowInvitePicker] = useState(false);
+  const [invitePeople, setInvitePeople] = useState<CallInvitePerson[]>([]);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [selectedInviteIds, setSelectedInviteIds] = useState<string[]>([]);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [inviteSuccess, setInviteSuccess] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef(new Map<string, RTCPeerConnection>());
@@ -380,6 +398,59 @@ function CallRoom({
     };
   }, [callId, closeResources, details?.call.isCaller, onClose]);
 
+  useEffect(() => {
+    if (!showInvitePicker) return;
+    let active = true;
+    setInviteLoading(true);
+    setInviteError("");
+    setInviteSuccess("");
+    void apiRequest<{ people: CallInvitePerson[] }>("/api/v1/chat/people")
+      .then(({ people }) => {
+        if (active) setInvitePeople(people);
+      })
+      .catch((loadError: unknown) => {
+        console.error("Could not load colleagues to invite to the call.", loadError);
+        if (active) setInviteError(loadError instanceof Error ? loadError.message : "We couldn't load colleagues.");
+      })
+      .finally(() => {
+        if (active) setInviteLoading(false);
+      });
+    return () => { active = false; };
+  }, [showInvitePicker]);
+
+  const currentParticipantIds = new Set([
+    user.id,
+    ...(details?.participants.map((participant) => participant.id) ?? []),
+    ...participants.map((participant) => participant.userId),
+  ]);
+  const availableInviteSlots = Math.max(0, 8 - currentParticipantIds.size);
+  const filteredInvitePeople = invitePeople.filter((person) =>
+    !currentParticipantIds.has(person.id)
+    && `${person.name} ${person.departmentName} ${person.role}`.toLocaleLowerCase().includes(inviteSearch.trim().toLocaleLowerCase()));
+
+  async function inviteSelectedPeople() {
+    if (inviting || selectedInviteIds.length === 0) return;
+    setInviting(true);
+    setInviteError("");
+    setInviteSuccess("");
+    try {
+      const result = await apiRequest<{ invited: CallUser[] }>(`/api/v1/calls/${callId}/invitations`, {
+        method: "POST",
+        body: JSON.stringify({ participantIds: selectedInviteIds }),
+      });
+      setDetails((current) => current
+        ? { ...current, participants: [...current.participants, ...result.invited] }
+        : current);
+      setSelectedInviteIds([]);
+      setInviteSuccess(`${result.invited.length} ${result.invited.length === 1 ? "person" : "people"} invited to the call.`);
+    } catch (inviteRequestError: unknown) {
+      console.error("Could not invite colleagues to the call.", inviteRequestError);
+      setInviteError(inviteRequestError instanceof Error ? inviteRequestError.message : "We couldn't invite those colleagues.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("Camera access requires a supported browser over HTTPS.");
@@ -409,6 +480,8 @@ function CallRoom({
         ? "Camera permission was blocked. Allow camera access in the browser, then try again."
         : cameraError instanceof DOMException && cameraError.name === "NotReadableError"
           ? "The camera is busy in another app or tab. Close it there, then try again."
+          : cameraError instanceof DOMException && (cameraError.name === "AbortError" || cameraError.name === "TimeoutError")
+            ? "The camera timed out while starting. You can retry or end the call."
           : cameraError instanceof Error ? cameraError.message : "The camera could not start.");
     }
   }
@@ -461,25 +534,35 @@ function CallRoom({
     finishingRef.current = true;
     try {
       if (details?.call.isCaller && channelRef.current) {
-        void channelRef.current.send({
-          type: "broadcast",
-          event: "call-ended",
-          payload: { callId },
-        }).then((result) => {
+        try {
+          const result = await channelRef.current.send({
+            type: "broadcast",
+            event: "call-ended",
+            payload: { callId },
+          });
           if (result !== "ok") console.error("Could not notify call participants that the call ended.", result);
-        }).catch((broadcastError: unknown) => {
+        } catch (broadcastError: unknown) {
           console.error("Could not broadcast call end.", broadcastError);
-        });
+        }
       }
+      try {
+        await apiRequest(`/api/v1/calls/${callId}/${details?.call.isCaller ? "end" : "leave"}`, { method: "PATCH" });
+      } catch (finishError: unknown) {
+        console.error("Could not close the active call cleanly.", finishError);
+        onFinishError(finishError instanceof Error ? finishError.message : "The call could not be ended on the server.");
+        try {
+          await apiRequest("/api/v1/calls/signout", { method: "POST" });
+        } catch (fallbackError: unknown) {
+          console.error("Could not clean up call sessions after the end-call request failed.", fallbackError);
+          onFinishError(fallbackError instanceof Error ? fallbackError.message : "Call cleanup also failed.");
+        }
+      }
+    } finally {
       closeResources();
       onClose();
-      void apiRequest("/api/v1/calls/signout", { method: "POST" }).catch((callError: unknown) => {
-        console.error("Could not end in-app call sessions while leaving the call.", callError);
-      });
-    } finally {
       finishingRef.current = false;
     }
-  }, [callId, closeResources, details?.call.isCaller, onClose]);
+  }, [callId, closeResources, details?.call.isCaller, onClose, onFinishError]);
 
   useEffect(() => {
     onRegisterFinish(finishCall);
@@ -506,7 +589,24 @@ function CallRoom({
             <strong>{remoteName}</strong>
             <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Calling…" : "Waiting for answer…"}</small>
           </div>
-          <span className="call-window__secure">🔒 End-to-end private</span>
+          <div className="call-window__header-actions">
+            <span className="call-window__secure">🔒 End-to-end private</span>
+            <button
+              className="call-window__invite"
+              type="button"
+              onClick={() => {
+                setInviteSearch("");
+                setSelectedInviteIds([]);
+                setShowInvitePicker(true);
+              }}
+              disabled={!details}
+              aria-label="Add people to call"
+              title="Add people to call"
+            >
+              <UserPlus size={17} />
+              <span>Add people</span>
+            </button>
+          </div>
           <button
             className="call-window__minimize"
             type="button"
@@ -557,9 +657,80 @@ function CallRoom({
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
           <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={() => setSpeakerMuted((value) => !value)} aria-label={speakerMuted ? "Turn speaker on" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>
           <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Start video" : "Stop video"}</small></button>
-          <button className="call-control call-control--end" type="button" onClick={() => void finishCall().catch(() => {})} aria-label="End call"><span><PhoneOff size={21} /></span><small>End</small></button>
+          <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={details?.call.isCaller ? "End call for everyone" : "Leave call"}><span><PhoneOff size={21} /></span><small>{details?.call.isCaller ? "End call" : "Leave call"}</small></button>
         </footer>
       </section>
+      {showInvitePicker && (
+        <div className="call-invite-backdrop" role="dialog" aria-modal="true" aria-labelledby="call-invite-title">
+          <section className="call-invite-dialog">
+            <header className="call-invite-dialog__header">
+              <div>
+                <h2 id="call-invite-title">Add people to call</h2>
+                <p>{availableInviteSlots} of 8 participant spots available</p>
+              </div>
+              <button type="button" onClick={() => setShowInvitePicker(false)} aria-label="Close invite list">
+                <X size={19} />
+              </button>
+            </header>
+            <label className="call-invite-search">
+              <Search size={17} />
+              <input
+                type="search"
+                value={inviteSearch}
+                onChange={(event) => setInviteSearch(event.target.value)}
+                placeholder="Search colleagues"
+                aria-label="Search colleagues to invite"
+                autoFocus
+              />
+            </label>
+            {inviteError && <p className="call-invite-message call-invite-message--error" role="alert">{inviteError}</p>}
+            {inviteSuccess && <p className="call-invite-message call-invite-message--success" role="status">{inviteSuccess}</p>}
+            <div className="call-invite-list">
+              {inviteLoading && <p className="call-invite-empty">Loading colleagues…</p>}
+              {!inviteLoading && filteredInvitePeople.map((person) => {
+                const selected = selectedInviteIds.includes(person.id);
+                const selectionFull = selectedInviteIds.length >= availableInviteSlots;
+                return (
+                  <button
+                    className={`call-invite-person${selected ? " call-invite-person--selected" : ""}`}
+                    type="button"
+                    key={person.id}
+                    disabled={!selected && selectionFull}
+                    onClick={() => setSelectedInviteIds((current) => selected
+                      ? current.filter((id) => id !== person.id)
+                      : [...current, person.id])}
+                  >
+                    <CallAvatar name={person.name} avatarPath={person.avatarPath} />
+                    <span className="call-invite-person__identity">
+                      <strong>{person.name}</strong>
+                      <small>{person.departmentName}</small>
+                    </span>
+                    <span className="call-invite-person__check">{selected && <Check size={16} />}</span>
+                  </button>
+                );
+              })}
+              {!inviteLoading && filteredInvitePeople.length === 0 && (
+                <p className="call-invite-empty">
+                  {availableInviteSlots === 0
+                    ? "This call is full."
+                    : inviteSearch.trim() ? "No colleagues match that search." : "There are no more colleagues to add."}
+                </p>
+              )}
+            </div>
+            <footer className="call-invite-dialog__actions">
+              <button type="button" className="call-invite-cancel" onClick={() => setShowInvitePicker(false)}>Cancel</button>
+              <button
+                type="button"
+                className="call-invite-submit"
+                onClick={() => void inviteSelectedPeople()}
+                disabled={inviting || selectedInviteIds.length === 0}
+              >
+                {inviting ? "Adding…" : `Add selected${selectedInviteIds.length ? ` (${selectedInviteIds.length})` : ""}`}
+              </button>
+            </footer>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -668,7 +839,7 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
           </div>
         </div>
       )}
-      {activeCallId && <CallRoom callId={activeCallId} user={user} onClose={() => setActiveCallId(null)} onRegisterFinish={registerFinishCall} />}
+      {activeCallId && <CallRoom callId={activeCallId} user={user} onClose={() => setActiveCallId(null)} onFinishError={setCallError} onRegisterFinish={registerFinishCall} />}
       {callError && <div className="call-toast" role="alert">{callError}<button type="button" onClick={() => setCallError("")} aria-label="Dismiss call error">×</button></div>}
     </CallsContext.Provider>
   );
