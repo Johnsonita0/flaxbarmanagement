@@ -1,5 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
+import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff, Volume2, VolumeX } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import type { AppRole, CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
@@ -93,6 +93,8 @@ function CallRoom({
   const [cameraOff, setCameraOff] = useState(true);
   const [cameraBusy, setCameraBusy] = useState(false);
   const [muted, setMuted] = useState(false);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [callSeconds, setCallSeconds] = useState(0);
   const [joining, setJoining] = useState(true);
   const [error, setError] = useState("");
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -407,39 +409,61 @@ function CallRoom({
     return () => onRegisterFinish(null);
   }, [finishCall, onRegisterFinish]);
 
+  useEffect(() => {
+    if (joining || !participants.length) return;
+    const timer = window.setInterval(() => setCallSeconds((seconds) => seconds + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [joining, participants.length]);
+
+  const remoteName = participants[0]?.name
+    ?? details?.participants.find((participant) => participant.id !== user.id)?.name
+    ?? "Calling";
+  const callDuration = `${Math.floor(callSeconds / 60).toString().padStart(2, "0")}:${(callSeconds % 60).toString().padStart(2, "0")}`;
+  const soloCall = participants.length <= 1;
+
   return (
     <div className="call-overlay" role="dialog" aria-modal="true" aria-label="In-app call">
-      <section className="call-window">
+      <section className={`call-window${soloCall ? " call-window--solo" : ""}`}>
         <header className="call-window__header">
-          <div><strong>{joining ? "Connecting call…" : details?.call.isCaller && !participants.length ? "Calling…" : "In-app call"}</strong><small>{participants.length + 1} connected</small></div>
-          {details?.turnConfigured === false && <small>Some networks may require TURN relay.</small>}
+          <div className="call-window__identity">
+            <strong>{remoteName}</strong>
+            <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Calling…" : "Waiting for answer…"}</small>
+          </div>
+          <span className="call-window__secure">🔒 End-to-end private</span>
         </header>
         {error && <div className="alert alert--error" role="alert">{error}</div>}
-        <div className="call-window__tiles">
-          <article className="call-tile">
-            {!cameraOff && <CallVideo stream={localStream} muted />}
-            {cameraOff && <span className="call-tile__avatar">{shortName(user.displayName ?? user.email ?? "You")}</span>}
-            <strong>You</strong>
-          </article>
+        <div className={`call-window__tiles${soloCall ? " call-window__tiles--solo" : ""}`}>
           {participants.map((participant) => {
             const remote = remoteStreams[participant.userId];
             const hasVideo = remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted);
             return (
-              <article className="call-tile" key={participant.userId}>
+              <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}`} key={participant.userId}>
                 {hasVideo
                   ? <CallVideo stream={remote ?? null} muted />
-                  : <span className="call-tile__avatar">{shortName(participant.name)}</span>}
-                <audio autoPlay ref={(node) => { if (node) node.srcObject = remote ?? null; }} />
-                <strong>{participant.name}</strong>
+                  : <span className="call-tile__avatar call-tile__avatar--large">{shortName(participant.name)}</span>}
+                <audio autoPlay muted={speakerMuted} ref={(node) => { if (node) node.srcObject = remote ?? null; }} />
+                <strong><span className="call-tile__audio-indicator" />{participant.name}</strong>
               </article>
             );
           })}
-          {!participants.length && <p className="call-window__waiting">Waiting for colleagues to answer…</p>}
+          {!participants.length && (
+            <div className="call-window__waiting">
+              <span className="call-window__waiting-avatar">{shortName(remoteName)}</span>
+              <strong>{details?.call.isCaller ? `Calling ${remoteName}` : "Connecting your call"}</strong>
+              <small>{joining ? "Securing connection…" : "Waiting for them to answer…"}</small>
+            </div>
+          )}
+          <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}`}>
+            {!cameraOff && <CallVideo stream={localStream} muted />}
+            {cameraOff && <span className="call-tile__avatar">{shortName(user.displayName ?? user.email ?? "You")}</span>}
+            <strong>You</strong>
+          </article>
         </div>
         <footer className="call-window__controls">
-          <button className="button button--outline" type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}>{muted ? <MicOff size={17} /> : <Mic size={17} />}{muted ? "Unmute" : "Mute"}</button>
-          <button className="button button--outline" type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Turn camera on" : "Turn camera off"}>{cameraOff ? <VideoOff size={17} /> : <Video size={17} />}{cameraBusy ? "Updating…" : cameraOff ? "Camera on" : "Camera off"}</button>
-          <button className="button button--danger" type="button" onClick={() => void finishCall().catch(() => {})}><PhoneOff size={17} />End call</button>
+          <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
+          <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={() => setSpeakerMuted((value) => !value)} aria-label={speakerMuted ? "Turn speaker on" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>
+          <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Turn camera on" : "Turn camera off"}><span>{cameraOff ? <VideoOff size={21} /> : <Video size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Camera off" : "Camera"}</small></button>
+          <button className="call-control call-control--end" type="button" onClick={() => void finishCall().catch(() => {})} aria-label="End call"><span><PhoneOff size={21} /></span><small>End</small></button>
         </footer>
       </section>
     </div>
