@@ -219,8 +219,27 @@
 .call-invite-dialog__actions button { min-height: 38px; padding: 0 14px; border: 1px solid rgba(239, 255, 250, .18); border-radius: 9px; color: #eef7f5; background: #29443f; font: inherit; font-size: 11px; cursor: pointer; }
 .call-invite-dialog__actions .call-invite-submit { border-color: #15885e; background: #16845e; }
 .call-invite-dialog__actions button:disabled { cursor: wait; opacity: .55; }
-.call-overlay--minimized { inset: auto 16px 16px auto; width: min(390px, calc(100vw - 32px)); height: auto; display: block; padding: 0; background: transparent; pointer-events: none; }
-.call-window--minimized { width: 100%; height: auto; min-height: 0; gap: 0; padding: 10px 12px; border: 1px solid rgba(222, 246, 240, .2); border-radius: 14px; background: #102d2a; box-shadow: 0 12px 38px rgba(0, 0, 0, .38); pointer-events: auto; }
+.call-overlay--minimized {
+  inset: auto 16px 16px auto;
+  width: min(280px, calc(100vw - 24px));
+  height: min(460px, 68dvh);
+  display: block;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+}
+.call-window--minimized {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  gap: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(222, 246, 240, .2);
+  border-radius: 14px;
+  background: #102d2a;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, .38);
+  pointer-events: auto;
+}
 .call-window--minimized .call-window__header { min-height: 36px; justify-content: flex-start; padding-left: 42px; }
 .call-window--minimized .call-window__identity { align-items: flex-start; margin: 0; text-align: left; }
 .call-window--minimized .call-window__identity strong { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
@@ -229,12 +248,14 @@
 .call-window--minimized .call-window__minimize { width: 32px; height: 32px; }
 .call-window--minimized .call-window__tiles {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 78px;
-  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(120px, 1fr);
+  min-height: 0;
+  flex: 1 1 auto;
   align-content: stretch;
   gap: 7px;
   padding: 7px 0 0;
+  overflow-y: auto;
 }
 .call-window--minimized .call-window__tiles--solo { display: grid; }
 .call-window--minimized .call-tile,
@@ -242,14 +263,15 @@
   position: relative;
   inset: auto;
   width: 100%;
-  height: 78px;
+  height: 100%;
   min-width: 0;
-  min-height: 0;
+  min-height: 120px;
   max-width: none;
   aspect-ratio: auto;
   border: 1px solid rgba(222, 246, 240, .16);
   border-radius: 9px;
 }
+.call-window--minimized .call-tile > video { object-fit: contain; }
 .call-window--minimized .call-tile--selfie { top: auto; right: auto; }
 .call-window--minimized .call-tile strong { bottom: 4px; left: 5px; max-width: calc(100% - 10px); padding: 3px 5px; font-size: 8px; }
 .call-window--minimized .call-tile__avatar-photo--large,
@@ -305,7 +327,12 @@
   .call-control > span { width: 49px; height: 49px; }
   .call-control--end > span { width: 58px; height: 49px; }
   .call-control small { font-size: 9px; }
-  .call-overlay--minimized { right: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: min(350px, calc(100vw - 20px)); }
+  .call-overlay--minimized {
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    width: min(280px, calc(100vw - 20px));
+    height: min(440px, 62dvh);
+  }
   .call-window--minimized { padding: 9px 10px; }
 }
 @media (max-height: 560px) and (min-width: 601px) {
