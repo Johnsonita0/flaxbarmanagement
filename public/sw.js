@@ -32,9 +32,12 @@ self.addEventListener("push", (event) => {
   const body = typeof data.body === "string" ? data.body : "You have an incoming call.";
   const callId = typeof data.callId === "string" ? data.callId : null;
   const notificationId = typeof data.notificationId === "string" ? data.notificationId : null;
-  event.waitUntil(self.registration.showNotification(title, {
+  const showNotification = self.registration.showNotification(title, {
     body,
     icon: "/icons/flexbar-192.png",
+    requireInteraction: data.type === "incoming-call",
+    renotify: true,
+    vibrate: data.type === "incoming-call" ? [450, 200, 450, 200, 700] : [200, 100, 200],
     tag: callId
       ? `flexbar-call-${callId}`
       : notificationId ? `flexbar-notification-${notificationId}` : "flexbar-notification",
@@ -46,7 +49,19 @@ self.addEventListener("push", (event) => {
       mediaMode: data.mediaMode === "video" ? "video" : "audio",
       url: typeof data.url === "string" ? data.url : "/",
     },
-  }));
+  });
+  const notifyOpenClients = data.type === "incoming-call"
+    ? Promise.resolve()
+    : self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        client.postMessage({
+          type: "flexbar:notification",
+          notificationId,
+          notificationType: typeof data.notificationType === "string" ? data.notificationType : "unknown",
+        });
+      }
+    });
+  event.waitUntil(Promise.all([showNotification, notifyOpenClients]));
 });
 
 self.addEventListener("notificationclick", (event) => {

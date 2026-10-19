@@ -129,7 +129,7 @@ export async function claimDeviceSession(session: Session, replaceExisting = fal
     session,
     replaceExisting ? { replaceExisting: true } : undefined,
   );
-  if (response.status === 409 && body?.code === "ACCOUNT_ALREADY_ACTIVE") return false;
+  if (response.status === 409 && body?.code === "DEVICE_SESSION_NOT_REGISTERED") return false;
   if (!response.ok) throw new Error(body?.error ?? "We couldn't verify this device. Please try again.");
   return true;
 }
@@ -161,7 +161,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   const body = await response.json().catch(() => null) as { code?: string; error?: string } | null;
   if (!response.ok) {
-    if (body?.code === "ACCOUNT_SESSION_REPLACED") {
+    if (body?.code === "ACCOUNT_SESSION_REPLACED" || body?.code === "ACCOUNT_SESSION_NOT_REGISTERED") {
       window.dispatchEvent(new Event("flexbar:account-session-replaced"));
     }
     throw new Error(body?.error ?? "We couldn't complete that request. Please try again.");
@@ -183,7 +183,7 @@ export async function fetchCurrentUser(session: Session): Promise<CurrentUser> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { code?: string } | null;
-    if (body?.code === "ACCOUNT_SESSION_REPLACED") {
+    if (body?.code === "ACCOUNT_SESSION_REPLACED" || body?.code === "ACCOUNT_SESSION_NOT_REGISTERED") {
       window.dispatchEvent(new Event("flexbar:account-session-replaced"));
     }
     if (response.status === 401) {

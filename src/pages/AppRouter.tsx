@@ -143,18 +143,18 @@ export default function AppRouter() {
     void claimDeviceSession(session).then((claimed) => {
       if (!mounted) return;
       if (!claimed) {
-        showToast("This account is already active on another device. Sign in here to replace that session.", "error");
+        showToast("This device could not be registered. Please sign in again.", "error");
         void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
           if (!error) return;
-          console.error("Could not clear the device session that could not be claimed.", error);
+          console.error("Could not clear the device session that could not be registered.", error);
           if (mounted) {
-            setDeviceSessionError("This account is active on another device. Sign in again here to replace its session.");
+            setDeviceSessionError("This device could not be registered. Sign in again to retry.");
             setDeviceSessionReady(true);
           }
         }).catch((error: unknown) => {
-          console.error("Could not clear the device session that could not be claimed.", error);
+          console.error("Could not clear the device session that could not be registered.", error);
           if (mounted) {
-            setDeviceSessionError("This account is active on another device. Sign in again here to replace its session.");
+            setDeviceSessionError("This device could not be registered. Sign in again to retry.");
             setDeviceSessionReady(true);
           }
         });
@@ -232,7 +232,7 @@ export default function AppRouter() {
 
   useEffect(() => {
     const handleSessionReplaced = () => {
-      showToast("Another device signed in to this account. This device has been signed out.", "error");
+      showToast("Your sign-in session could not be verified. Please sign in again.", "error");
       void supabase?.auth.signOut({ scope: "local" }).then(({ error }) => {
         if (error) console.error("Could not clear the replaced device's local sign-in.", error);
       }).catch((error: unknown) => console.error("Could not clear the replaced device's local sign-in.", error));

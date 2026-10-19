@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Bell, Check, ChevronRight, Clock3, MapPin, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
+import { Bell, Check, ChevronRight, Clock3, MapPin, ShieldCheck, SlidersHorizontal, UsersRound, Volume2 } from "lucide-react";
 import { adminRequest, apiRequest } from "../lib/api";
+import { getNotificationSoundPreferences, playNotificationTone, saveNotificationSoundPreferences, type NotificationSound, type NotificationSoundPreferences } from "../lib/notificationSounds";
 import PageHeading from "../components/PageHeading";
 import "../css/OperationsPages.css";
 
-type SettingsSection = "menu" | "location" | "roles" | "notifications" | "activity" | "system";
+type SettingsSection = "menu" | "location" | "roles" | "notifications" | "sounds" | "activity" | "system";
 
 interface LocationSettings {
   latitude: number | null;
@@ -41,9 +42,11 @@ interface ActivityEntry {
 
 export default function SettingsPage({
   canManage = false,
+  userId,
   onManageUsers,
 }: {
   canManage?: boolean;
+  userId: string;
   onManageUsers?: () => void;
 }) {
   const [section, setSection] = useState<SettingsSection>("menu");
@@ -51,6 +54,7 @@ export default function SettingsPage({
   const [radius, setRadius] = useState("100");
   const [locationTimezone, setLocationTimezone] = useState("Africa/Lagos");
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  const [soundSettings, setSoundSettings] = useState<NotificationSoundPreferences>({ calls: false, messages: false });
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -82,6 +86,9 @@ export default function SettingsPage({
         .finally(() => {
           if (mounted) setLoading(false);
         });
+    } else if (section === "sounds") {
+      setSoundSettings(getNotificationSoundPreferences(userId));
+      setLoading(false);
     } else if (section === "system" || section === "notifications") {
       if (!canManage) return () => { mounted = false; };
       setLoading(true);
@@ -111,7 +118,7 @@ export default function SettingsPage({
     }
 
     return () => { mounted = false; };
-  }, [section, canManage, activityRefresh]);
+  }, [section, canManage, activityRefresh, userId]);
 
   function detectLocation() {
     setNotice("");
@@ -174,14 +181,45 @@ export default function SettingsPage({
       : current);
   }
 
+  function updateSound(key: keyof NotificationSoundPreferences, checked: boolean) {
+    setSoundSettings((current) => ({ ...current, [key]: checked }));
+  }
+
+  function saveSoundSettings() {
+    setError("");
+    setNotice("");
+    try {
+      saveNotificationSoundPreferences(userId, soundSettings);
+      setNotice("Notification sound settings saved on this device.");
+    } catch (reason: unknown) {
+      console.error("Could not save notification sound settings.", reason);
+      setError("We couldn't save notification sound settings in this browser.");
+    }
+  }
+
+  async function testSound(sound: NotificationSound) {
+    setError("");
+    setNotice("");
+    try {
+      await playNotificationTone(sound);
+    } catch (reason: unknown) {
+      console.error("Could not play the notification sound preview.", reason);
+      setError(reason instanceof Error ? reason.message : "We couldn't play the notification sound.");
+    }
+  }
+
   return (
     <section className="module-page">
       <PageHeading
         title={section === "menu" ? "Settings" : settingTitle(section)}
-        description={section === "menu" ? "System administration and business configuration." : "Manage Flex Bar's system-wide configuration."}
+        description={section === "menu"
+          ? "Manage your notification sounds and business configuration."
+          : section === "sounds"
+            ? "Choose which incoming alerts make a sound on this device."
+            : "Manage Flex Bar's system-wide configuration."}
       />
       {section !== "menu" && <button className="icon-link" onClick={() => setSection("menu")}>← Back to settings</button>}
-      {!canManage && section !== "menu" && section !== "location" && (
+      {!canManage && section !== "menu" && section !== "location" && section !== "sounds" && (
         <div className="alert alert--error" role="alert">These settings are available to the Flex Bar system administrator.</div>
       )}
       {error && <div className="alert alert--error" role="alert">{error}</div>}
@@ -190,11 +228,36 @@ export default function SettingsPage({
 
       {!loading && section === "menu" && (
         <div className="surface-card settings-list">
-          <button className="settings-row" onClick={() => setSection("location")}><span className="settings-row__icon"><MapPin size={17} /></span><span><strong>Business Location / Geofence</strong><small>Set the approved attendance location</small></span><ChevronRight size={16} /></button>
-          <button className="settings-row" onClick={() => setSection("roles")}><span className="settings-row__icon"><UsersRound size={17} /></span><span><strong>Roles &amp; Permissions</strong><small>Manage team access and assignments</small></span><ChevronRight size={16} /></button>
-          <button className="settings-row" onClick={() => setSection("notifications")}><span className="settings-row__icon"><Bell size={17} /></span><span><strong>Notifications</strong><small>Control system-wide notification categories</small></span><ChevronRight size={16} /></button>
-          <button className="settings-row" onClick={() => setSection("activity")}><span className="settings-row__icon"><Clock3 size={17} /></span><span><strong>Activity Log</strong><small>Review administrator changes</small></span><ChevronRight size={16} /></button>
-          <button className="settings-row" onClick={() => setSection("system")}><span className="settings-row__icon"><SlidersHorizontal size={17} /></span><span><strong>System Settings</strong><small>Set currency, timezone and business hours</small></span><ChevronRight size={16} /></button>
+          <button className="settings-row" onClick={() => setSection("sounds")}><span className="settings-row__icon"><Volume2 size={17} /></span><span><strong>Call &amp; message sounds</strong><small>Turn incoming call and message tones on or off</small></span><ChevronRight size={16} /></button>
+          {canManage && <>
+            <button className="settings-row" onClick={() => setSection("location")}><span className="settings-row__icon"><MapPin size={17} /></span><span><strong>Business Location / Geofence</strong><small>Set the approved attendance location</small></span><ChevronRight size={16} /></button>
+            <button className="settings-row" onClick={() => setSection("roles")}><span className="settings-row__icon"><UsersRound size={17} /></span><span><strong>Roles &amp; Permissions</strong><small>Manage team access and assignments</small></span><ChevronRight size={16} /></button>
+            <button className="settings-row" onClick={() => setSection("notifications")}><span className="settings-row__icon"><Bell size={17} /></span><span><strong>Notifications</strong><small>Control system-wide notification categories</small></span><ChevronRight size={16} /></button>
+            <button className="settings-row" onClick={() => setSection("activity")}><span className="settings-row__icon"><Clock3 size={17} /></span><span><strong>Activity Log</strong><small>Review administrator changes</small></span><ChevronRight size={16} /></button>
+            <button className="settings-row" onClick={() => setSection("system")}><span className="settings-row__icon"><SlidersHorizontal size={17} /></span><span><strong>System Settings</strong><small>Set currency, timezone and business hours</small></span><ChevronRight size={16} /></button>
+          </>}
+        </div>
+      )}
+
+      {!loading && section === "sounds" && (
+        <div className="surface-card form-card">
+          <h2>Call and message sounds</h2>
+          <p className="form-help">Choose whether Flex Bar plays a tone for incoming calls and messages while the app is open. Browser notification permission controls alerts when Flex Bar is closed.</p>
+          <div className="settings-list">
+            <label className="toggle-row settings-sound-row">
+              <span><strong>Incoming calls</strong><small>Play a ringing tone when someone calls you.</small></span>
+              <input type="checkbox" checked={soundSettings.calls} onChange={(event) => updateSound("calls", event.target.checked)} />
+            </label>
+            <label className="toggle-row settings-sound-row">
+              <span><strong>New messages</strong><small>Play a tone when a new chat message arrives.</small></span>
+              <input type="checkbox" checked={soundSettings.messages} onChange={(event) => updateSound("messages", event.target.checked)} />
+            </label>
+          </div>
+          <div className="settings-sound-actions">
+            <button className="button button--outline" type="button" onClick={() => void testSound("call")}><Volume2 size={15} />Test call tone</button>
+            <button className="button button--outline" type="button" onClick={() => void testSound("message")}><Volume2 size={15} />Test message tone</button>
+            <button className="button button--primary" type="button" onClick={saveSoundSettings}><Check size={15} />Save sound settings</button>
+          </div>
         </div>
       )}
 
@@ -265,6 +328,7 @@ function settingTitle(section: SettingsSection): string {
     location: "Business Location / Geofence",
     roles: "Roles & Permissions",
     notifications: "Notifications",
+    sounds: "Call & message sounds",
     activity: "Activity Log",
     system: "System Settings",
   };

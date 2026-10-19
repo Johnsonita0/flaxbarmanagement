@@ -21,12 +21,27 @@ interface CallPushConfig {
   enabled: boolean;
   publicKey: string | null;
   subscribed: boolean;
+  configurationError?: string | null;
 }
 
 function getApplicationServerKey(value: string) {
+  if (!/^[A-Za-z0-9_-]{87}$/.test(value)) {
+    throw new Error("Call alerts are misconfigured. Please contact your administrator.");
+  }
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const decoded = window.atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "="));
-  return Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  const key = Uint8Array.from(decoded, (character) => character.charCodeAt(0));
+  if (key.length !== 65 || key[0] !== 4) {
+    throw new Error("Call alerts are misconfigured. Please contact your administrator.");
+  }
+  return key;
+}
+
+function sameApplicationServerKey(subscription: PushSubscription, expected: Uint8Array) {
+  const current = subscription.options.applicationServerKey;
+  if (!current || current.byteLength !== expected.byteLength) return false;
+  const currentBytes = new Uint8Array(current);
+  return expected.every((byte, index) => byte === currentBytes[index]);
 }
 
 function notificationCategory(type: string) {
@@ -53,6 +68,7 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
   const [openingNotificationId, setOpeningNotificationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [callPushConfig, setCallPushConfig] = useState<CallPushConfig | null>(null);
+  const [callPushError, setCallPushError] = useState("");
   const [callPushSaving, setCallPushSaving] = useState(false);
   const callPushSupported = typeof window !== "undefined"
     && window.isSecureContext
@@ -89,7 +105,9 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
     void apiRequest<CallPushConfig>("/api/v1/call-push/config")
       .then((config) => { if (active) setCallPushConfig(config); })
       .catch((reason: unknown) => {
-        if (active) showToast(reason instanceof Error ? reason.message : "Call alert settings could not be loaded.", "error");
+        if (active) {
+          setCallPushError(reason instanceof Error ? reason.message : "Call alert settings could not be loaded.");
+        }
       });
     return () => { active = false; };
   }, [callPushSupported, showToast]);
@@ -140,29 +158,49 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
     setCallPushSaving(true);
     try {
       const registration = await navigator.serviceWorker.ready;
-      const subscription = await registration.pushManager.getSubscription();
-      if (callPushConfig.subscribed) {
+      let subscription = await registration.pushManager.getSubscription();
+      const applicationServerKey = callPushConfig.enabled && callPushConfig.publicKey
+        ? getApplicationServerKey(callPushConfig.publicKey)
+        : null;
+      if (
+        callPushConfig.subscribed &&
+        subscription &&
+        applicationServerKey &&
+        sameApplicationServerKey(subscription, applicationServerKey)
+      ) {
         await apiRequest("/api/v1/call-push/subscription", {
           method: "DELETE",
-          body: JSON.stringify(subscription ? { endpoint: subscription.endpoint } : {}),
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
         });
-        if (subscription) await subscription.unsubscribe();
+        await subscription.unsubscribe();
         setCallPushConfig({ ...callPushConfig, subscribed: false });
         showToast("Incoming call alerts are disabled on this device.", "success");
         return;
       }
 
       if (!callPushConfig.enabled || !callPushConfig.publicKey) {
-        throw new Error("Call alerts are not configured yet. Please contact your administrator.");
+        throw new Error(callPushConfig.configurationError ?? "Call alerts are not configured yet. Please contact your administrator.");
       }
+      const expectedApplicationServerKey = applicationServerKey ?? getApplicationServerKey(callPushConfig.publicKey);
       let permission = Notification.permission;
       if (permission === "default") permission = await Notification.requestPermission();
       setDevicePermission(permission);
       if (permission !== "granted") throw new Error("Allow notifications in your browser settings to enable call alerts.");
 
-      const activeSubscription = subscription ?? await registration.pushManager.subscribe({
+      let activeSubscription = subscription;
+      if (activeSubscription && !sameApplicationServerKey(activeSubscription, expectedApplicationServerKey)) {
+        await apiRequest("/api/v1/call-push/subscription", {
+          method: "DELETE",
+          body: JSON.stringify({ endpoint: activeSubscription.endpoint }),
+        });
+        await activeSubscription.unsubscribe();
+        activeSubscription = null;
+      } else if (callPushConfig.subscribed && !activeSubscription) {
+        await apiRequest("/api/v1/call-push/subscription", { method: "DELETE", body: JSON.stringify({}) });
+      }
+      activeSubscription ??= await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: getApplicationServerKey(callPushConfig.publicKey),
+        applicationServerKey: expectedApplicationServerKey,
       });
       const serialized = activeSubscription.toJSON();
       if (!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth) {
@@ -222,16 +260,18 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
         <div className="notification-push-setting">
           <div>
             <strong>Incoming call alerts</strong>
-            <small>Get a browser alert when a colleague calls, including while Flex Bar is closed.</small>
+            <small>Get call and message alerts on this device, including while Flex Bar is closed. Enable alerts separately on each device.</small>
           </div>
           {!callPushSupported
-            ? <span className="notification-device-status">Push alerts are not supported in this browser</span>
+            ? <span className="notification-device-status">{/iphone|ipad|ipod/i.test(navigator.userAgent)
+              ? "On iPhone or iPad, install Flex Bar from Safari's Share menu first."
+              : "Push alerts are not supported in this browser"}</span>
             : !callPushConfig
-              ? <span className="notification-device-status">Loading call alert settings…</span>
+              ? <span className="notification-device-status">{callPushError || "Loading call alert settings…"}</span>
               : !callPushConfig.enabled
-                ? <span className="notification-device-status">Call alerts are not configured</span>
+                ? <span className="notification-device-status">{callPushConfig.configurationError ?? "Call alerts are not configured"}</span>
                 : <button className="button button--outline" type="button" disabled={callPushSaving} onClick={() => void toggleCallAlerts()}>
-                  <Bell size={14} />{callPushSaving ? "Updating…" : callPushConfig.subscribed ? "Disable call alerts" : "Enable call alerts"}
+                  <Bell size={14} />{callPushSaving ? "Updating…" : callPushConfig.subscribed ? "Disable device alerts" : "Enable call & message alerts"}
                 </button>}
         </div>
       </div>

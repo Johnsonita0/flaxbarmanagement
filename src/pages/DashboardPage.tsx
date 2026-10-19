@@ -84,12 +84,10 @@ const savedSections: DashboardSection[] = [
   "Settings",
 ];
 
-function readLastSection(userId: string, role: CurrentUser["role"]): { section: DashboardSection; error: string } {
+function readLastSection(userId: string): { section: DashboardSection; error: string } {
   try {
     const saved = window.localStorage.getItem(`flexbar:last-section:${userId}`);
-    const availableSections = role === "super_admin"
-      ? savedSections
-      : savedSections.filter((section) => section !== "Settings");
+    const availableSections = savedSections;
     return {
       section: availableSections.find((section) => section === saved) ?? "Overview",
       error: "",
@@ -112,7 +110,7 @@ export default function DashboardPage({
 }) {
   const { endActiveCall } = useInAppCalls();
   const { showToast } = useToast();
-  const [restoration] = useState(() => readLastSection(user.id, user.role));
+  const [restoration] = useState(() => readLastSection(user.id));
   const [activeSection, setActiveSection] = useState<DashboardSection>(restoration.section);
   const activeSectionRef = useRef(activeSection);
   const sectionHistory = useRef<DashboardSection[]>([]);
@@ -308,9 +306,12 @@ export default function DashboardPage({
         filter: `user_id=eq.${user.id}`,
       }, (payload) => {
         window.dispatchEvent(new Event("flexbar:notification"));
+        const row = payload.new as { id?: unknown; type?: unknown; title?: unknown; detail?: unknown };
+        const notificationType = typeof row.type === "string" ? row.type : "unknown";
+        window.dispatchEvent(new CustomEvent("flexbar:notification-sound", {
+          detail: { notificationId: row.id, notificationType },
+        }));
         if ("Notification" in window && Notification.permission === "granted") {
-          const row = payload.new as { id?: unknown; type?: unknown; title?: unknown; detail?: unknown };
-          const notificationType = typeof row.type === "string" ? row.type : "unknown";
           const title = typeof row.title === "string" ? row.title : "Flex Bar notification";
           const body = typeof row.detail === "string" ? row.detail : "You have a new workspace update.";
           const tag = typeof row.id === "string" ? `flexbar-notification-${row.id}` : undefined;
@@ -380,7 +381,7 @@ export default function DashboardPage({
             onNavigate={navigate}
           />
         );
-      case "Settings": return <SettingsPage canManage={user.role === "super_admin" || user.role === "management_admin"} onManageUsers={() => navigate("Staff")} />;
+      case "Settings": return <SettingsPage userId={user.id} canManage={user.role === "super_admin" || user.role === "management_admin"} onManageUsers={() => navigate("Staff")} />;
       case "Overview": return null;
     }
   }
@@ -402,7 +403,7 @@ export default function DashboardPage({
           <span className="pwa-install-prompt__icon"><Bell size={17} /></span>
           <div className="pwa-install-prompt__copy">
             <strong>Enable notifications</strong>
-            <span>Allow alerts, then enable Incoming call alerts in Notifications for push while the app is closed.</span>
+            <span>Allow browser alerts, enable Incoming call alerts in Notifications, and choose call/message tones in Settings.</span>
           </div>
           <button type="button" onClick={() => void requestDeviceNotificationPermission()}>
             Allow

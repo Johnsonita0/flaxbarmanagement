@@ -3,6 +3,7 @@ import { Check, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Search, User
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
+import { getNotificationSoundPreferences, playNotificationTone } from "../lib/notificationSounds";
 import { supabase } from "../lib/supabase";
 import "../css/InAppCalls.css";
 
@@ -733,6 +734,8 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
   const [callError, setCallError] = useState("");
   const startingRef = useRef(false);
   const finishCallRef = useRef<(() => Promise<void>) | null>(null);
+  const seenInvitationIdsRef = useRef(new Set<string>());
+  const seenMessageNotificationIdsRef = useRef(new Set<string>());
 
   const registerFinishCall = useCallback((finish: (() => Promise<void>) | null) => {
     finishCallRef.current = finish;
@@ -778,7 +781,21 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
       requestRunning = true;
       try {
         const result = await apiRequest<{ invitations: CallInvitation[] }>("/api/v1/calls/invitations");
-        if (!stopped) setInvitations(result.invitations);
+        if (stopped) return;
+        const newInvitations = result.invitations.filter((invitation) => !seenInvitationIdsRef.current.has(invitation.id));
+        for (const invitation of result.invitations) {
+          seenInvitationIdsRef.current.add(invitation.id);
+        }
+        if (seenInvitationIdsRef.current.size > 100) {
+          const oldestId = seenInvitationIdsRef.current.values().next().value;
+          if (oldestId) seenInvitationIdsRef.current.delete(oldestId);
+        }
+        setInvitations(result.invitations);
+        if (newInvitations.length > 0 && getNotificationSoundPreferences(user.id).calls) {
+          void playNotificationTone("call").catch((error: unknown) => {
+            console.error("Could not play the incoming call tone.", error);
+          });
+        }
       } catch (error: unknown) {
         console.error("Could not check for incoming calls.", error);
       } finally {
@@ -796,7 +813,46 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
       window.clearInterval(interval);
       navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
     };
-  }, [activeCallId]);
+  }, [activeCallId, user.id]);
+
+  useEffect(() => {
+    const playForMessage = (notificationId: unknown, notificationType: unknown) => {
+      if (
+        typeof notificationType !== "string" ||
+        !["chat_message", "message"].includes(notificationType.trim().toLocaleLowerCase().replace(/[\s-]+/g, "_")) ||
+        document.visibilityState !== "visible" ||
+        !getNotificationSoundPreferences(user.id).messages
+      ) return;
+      if (typeof notificationId === "string") {
+        if (seenMessageNotificationIdsRef.current.has(notificationId)) return;
+        seenMessageNotificationIdsRef.current.add(notificationId);
+        if (seenMessageNotificationIdsRef.current.size > 100) {
+          const oldestId = seenMessageNotificationIdsRef.current.values().next().value;
+          if (oldestId) seenMessageNotificationIdsRef.current.delete(oldestId);
+        }
+      }
+      void playNotificationTone("message").catch((error: unknown) => {
+        console.error("Could not play the incoming message tone.", error);
+      });
+    };
+    const handleRealtimeNotification = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (typeof detail !== "object" || detail === null) return;
+      playForMessage(Reflect.get(detail, "notificationId"), Reflect.get(detail, "notificationType"));
+    };
+    const handleWorkerNotification = (event: MessageEvent<{ type?: string; notificationId?: unknown; notificationType?: unknown }>) => {
+      if (event.data?.type === "flexbar:notification") {
+        playForMessage(event.data.notificationId, event.data.notificationType);
+      }
+    };
+    window.addEventListener("flexbar:notification-sound", handleRealtimeNotification);
+    navigator.serviceWorker?.addEventListener("message", handleWorkerNotification);
+    return () => {
+      window.removeEventListener("flexbar:notification-sound", handleRealtimeNotification);
+      navigator.serviceWorker?.removeEventListener("message", handleWorkerNotification);
+    };
+  }, [user.id]);
 
   async function answer(invitation: CallInvitation) {
     setCallError("");

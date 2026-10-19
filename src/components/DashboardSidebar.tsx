@@ -88,10 +88,10 @@ export default function DashboardSidebar({
   const sectionsByRole: Record<AppRole, DashboardSection[]> = {
     super_admin: navigation.map(({ label }) => label),
     management_admin: navigation.map(({ label }) => label),
-    department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
-    inventory_officer: ["Overview", "Inventory", "Stock Movement", "Sales", "Tasks", "Reports", "Notifications", "Profile"],
-    cash_sales_officer: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile"],
-    staff: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Notifications", "Profile"],
+    department_supervisor: ["Overview", "Staff", "Attendance", "Departments", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile", "Settings"],
+    inventory_officer: ["Overview", "Inventory", "Stock Movement", "Sales", "Tasks", "Reports", "Notifications", "Profile", "Settings"],
+    cash_sales_officer: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Reports", "Notifications", "Profile", "Settings"],
+    staff: ["Overview", "Attendance", "Sales", "Stock Movement", "Cash Management", "Tasks", "Meeting Room", "Chat", "Notifications", "Profile", "Settings"],
   };
   const canBrowseAllSales = role === "super_admin" || role === "management_admin";
   const allowedSections = [
