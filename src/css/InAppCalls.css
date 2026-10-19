@@ -227,7 +227,38 @@
 .call-window--minimized .call-window__identity small { font-size: 11px; }
 .call-window--minimized .call-window__header-actions { display: none; }
 .call-window--minimized .call-window__minimize { width: 32px; height: 32px; }
-.call-window--minimized .call-window__tiles { display: none; }
+.call-window--minimized .call-window__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 78px;
+  flex: 0 0 auto;
+  align-content: stretch;
+  gap: 7px;
+  padding: 7px 0 0;
+}
+.call-window--minimized .call-window__tiles--solo { display: grid; }
+.call-window--minimized .call-tile,
+.call-window--minimized .call-tile--hero {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 78px;
+  min-width: 0;
+  min-height: 0;
+  max-width: none;
+  aspect-ratio: auto;
+  border: 1px solid rgba(222, 246, 240, .16);
+  border-radius: 9px;
+}
+.call-window--minimized .call-tile--selfie { top: auto; right: auto; }
+.call-window--minimized .call-tile strong { bottom: 4px; left: 5px; max-width: calc(100% - 10px); padding: 3px 5px; font-size: 8px; }
+.call-window--minimized .call-tile__avatar-photo--large,
+.call-window--minimized .call-tile__avatar--large { width: 34px; height: 34px; font-size: 12px; }
+.call-window--minimized .call-window__waiting { position: relative; inset: auto; gap: 4px; min-height: 0; font-size: 9px; }
+.call-window--minimized .call-window__waiting-avatar { width: 34px; height: 34px; font-size: 12px; box-shadow: none; }
+.call-window--minimized .call-window__waiting strong { max-width: 100%; margin-top: 0; font-size: 8px; }
+.call-window--minimized .call-window__waiting small { font-size: 7px; }
+.call-window--minimized .call-window__secure { display: none; }
 .call-window--minimized > .alert { width: 100%; margin: 6px 0 0; padding: 8px; font-size: 10px; }
 .call-window--minimized .call-window__controls { justify-content: flex-end; gap: 12px; padding: 8px 0 0; }
 .call-window--minimized .call-control { min-width: 40px; gap: 3px; }

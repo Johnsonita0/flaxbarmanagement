@@ -281,7 +281,9 @@ function CallRoom({
           };
           connection.onconnectionstatechange = () => {
             if (connection.connectionState === "failed" && mountedRef.current) {
-              setError("The network blocked this direct connection. Ask your administrator about configuring a TURN relay.");
+              setError(room.turnConfigured
+                ? "The call could not connect through the configured TURN relay. Check that the relay service and credentials are still active."
+                : "This network requires a TURN relay, but one is not configured for calls yet. Contact your administrator to set one up.");
             }
           };
           peersRef.current.set(peerId, connection);
@@ -670,16 +672,18 @@ function CallRoom({
               <small>{joining ? "Securing connection…" : "Ringing…"}</small>
             </div>
           )}
-          {localVideoTrack && !cameraOff && (
+          {((localVideoTrack && !cameraOff) || minimized) && (
             <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}${portraitVideos[user.id] ? " call-tile--portrait" : ""}`}>
-              <CallVideo
-                stream={localStream}
-                muted
-                onDimensions={(width, height) => setPortraitVideos((current) => ({
-                  ...current,
-                  [user.id]: height > width,
-                }))}
-              />
+              {localVideoTrack && !cameraOff
+                ? <CallVideo
+                  stream={localStream}
+                  muted
+                  onDimensions={(width, height) => setPortraitVideos((current) => ({
+                    ...current,
+                    [user.id]: height > width,
+                  }))}
+                />
+                : <CallAvatar name={user.displayName?.trim() || "You"} avatarPath={user.avatarPath} large />}
               <strong>You</strong>
             </article>
           )}
