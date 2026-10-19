@@ -18,6 +18,13 @@ interface CallInvitation {
   createdAt: string;
 }
 
+type IncomingCallNotificationAction = "open" | "answer" | "decline";
+
+interface PendingIncomingCallAction {
+  callId: string;
+  action: IncomingCallNotificationAction;
+}
+
 interface CallUser {
   id: string;
   name: string;
@@ -731,11 +738,13 @@ function CallRoom({
 export function InAppCallsProvider({ user, children }: { user: CurrentUser; children: ReactNode }) {
   const [activeCallId, setActiveCallId] = useState<string | null>(null);
   const [invitations, setInvitations] = useState<CallInvitation[]>([]);
+  const [pendingNotificationAction, setPendingNotificationAction] = useState<PendingIncomingCallAction | null>(null);
   const [callError, setCallError] = useState("");
   const startingRef = useRef(false);
   const finishCallRef = useRef<(() => Promise<void>) | null>(null);
   const seenInvitationIdsRef = useRef(new Set<string>());
   const seenMessageNotificationIdsRef = useRef(new Set<string>());
+  const handledNotificationActionsRef = useRef(new Set<string>());
 
   const registerFinishCall = useCallback((finish: (() => Promise<void>) | null) => {
     finishCallRef.current = finish;
@@ -773,6 +782,21 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
   }, [activeCallId]);
 
   useEffect(() => {
+    const launchUrl = new URL(window.location.href);
+    const callId = launchUrl.searchParams.get("incomingCallId");
+    const action = launchUrl.searchParams.get("incomingCallAction");
+    if (
+      callId &&
+      (action === "open" || action === "answer" || action === "decline")
+    ) {
+      setPendingNotificationAction({ callId, action });
+      launchUrl.searchParams.delete("incomingCallId");
+      launchUrl.searchParams.delete("incomingCallAction");
+      window.history.replaceState(null, "", `${launchUrl.pathname}${launchUrl.search}${launchUrl.hash}`);
+    }
+  }, []);
+
+  useEffect(() => {
     if (activeCallId) return;
     let stopped = false;
     let requestRunning = false;
@@ -802,8 +826,19 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
         requestRunning = false;
       }
     };
-    const handleWorkerMessage = (event: MessageEvent<{ type?: string }>) => {
-      if (event.data?.type === "flexbar:incoming-call") void checkCalls();
+    const handleWorkerMessage = (event: MessageEvent<{
+      type?: string;
+      callId?: unknown;
+      action?: unknown;
+    }>) => {
+      if (event.data?.type !== "flexbar:incoming-call") return;
+      if (
+        typeof event.data.callId === "string" &&
+        (event.data.action === "open" || event.data.action === "answer" || event.data.action === "decline")
+      ) {
+        setPendingNotificationAction({ callId: event.data.callId, action: event.data.action });
+      }
+      void checkCalls();
     };
     navigator.serviceWorker?.addEventListener("message", handleWorkerMessage);
     void checkCalls();
@@ -814,6 +849,25 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
       navigator.serviceWorker?.removeEventListener("message", handleWorkerMessage);
     };
   }, [activeCallId, user.id]);
+
+  useEffect(() => {
+    if (!pendingNotificationAction) return;
+    const invitation = invitations.find(({ id }) => id === pendingNotificationAction.callId);
+    if (!invitation) return;
+
+    const actionKey = `${pendingNotificationAction.callId}:${pendingNotificationAction.action}`;
+    if (handledNotificationActionsRef.current.has(actionKey)) {
+      setPendingNotificationAction(null);
+      return;
+    }
+    handledNotificationActionsRef.current.add(actionKey);
+    setPendingNotificationAction(null);
+    if (pendingNotificationAction.action === "answer") {
+      void answer(invitation);
+    } else if (pendingNotificationAction.action === "decline") {
+      void decline(invitation);
+    }
+  }, [invitations, pendingNotificationAction]);
 
   useEffect(() => {
     const playForMessage = (notificationId: unknown, notificationType: unknown) => {

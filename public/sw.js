@@ -32,12 +32,19 @@ self.addEventListener("push", (event) => {
   const body = typeof data.body === "string" ? data.body : "You have an incoming call.";
   const callId = typeof data.callId === "string" ? data.callId : null;
   const notificationId = typeof data.notificationId === "string" ? data.notificationId : null;
+  const isIncomingCall = data.type === "incoming-call" && typeof callId === "string";
   const showNotification = self.registration.showNotification(title, {
     body,
     icon: "/icons/flexbar-192.png",
-    requireInteraction: data.type === "incoming-call",
+    requireInteraction: isIncomingCall,
     renotify: true,
-    vibrate: data.type === "incoming-call" ? [450, 200, 450, 200, 700] : [200, 100, 200],
+    vibrate: isIncomingCall ? [450, 200, 450, 200, 700] : [200, 100, 200],
+    ...(isIncomingCall ? {
+      actions: [
+        { action: "answer", title: "Answer" },
+        { action: "decline", title: "Decline" },
+      ],
+    } : {}),
     tag: callId
       ? `flexbar-call-${callId}`
       : notificationId ? `flexbar-notification-${notificationId}` : "flexbar-notification",
@@ -67,8 +74,15 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification.data || {};
+  const isIncomingCall = data.type === "incoming-call" && typeof data.callId === "string";
+  const callAction = isIncomingCall
+    ? event.action === "answer" || event.action === "decline" ? event.action : "open"
+    : null;
   const target = new URL(data.url || "/", self.location.origin);
-  if (data.type !== "incoming-call" && typeof data.notificationId === "string") {
+  if (isIncomingCall) {
+    target.searchParams.set("incomingCallId", data.callId);
+    target.searchParams.set("incomingCallAction", callAction);
+  } else if (typeof data.notificationId === "string") {
     target.searchParams.set("notificationId", data.notificationId);
     target.searchParams.set("notificationType", typeof data.notificationType === "string" ? data.notificationType : "unknown");
   }
@@ -77,13 +91,16 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       const appClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
       if (appClient) {
-        appClient.postMessage(data.type === "incoming-call"
-          ? { type: "flexbar:incoming-call", callId: data.callId }
-          : {
-            type: "flexbar:open-notification",
-            notificationId: data.notificationId,
-            notificationType: data.notificationType,
-          });
+        if (isIncomingCall) {
+          return appClient.navigate(targetUrl).then((navigatedClient) =>
+            (navigatedClient || appClient).focus(),
+          );
+        }
+        appClient.postMessage({
+          type: "flexbar:open-notification",
+          notificationId: data.notificationId,
+          notificationType: data.notificationType,
+        });
         return appClient.focus();
       }
       return self.clients.openWindow(targetUrl);
