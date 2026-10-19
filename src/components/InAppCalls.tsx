@@ -8,6 +8,9 @@ import { supabase } from "../lib/supabase";
 import "../css/InAppCalls.css";
 
 type MediaMode = "audio" | "video";
+const serviceWorkerControlledAtStartup = typeof navigator !== "undefined"
+  && "serviceWorker" in navigator
+  && Boolean(navigator.serviceWorker.controller);
 
 interface CallInvitation {
   id: string;
@@ -780,6 +783,24 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
   const seenInvitationIdsRef = useRef(new Set<string>());
   const seenMessageNotificationIdsRef = useRef(new Set<string>());
   const handledNotificationActionsRef = useRef(new Set<string>());
+  const reloadAfterCallForUpdateRef = useRef(false);
+
+  useEffect(() => {
+    if (!serviceWorkerControlledAtStartup || !("serviceWorker" in navigator)) return;
+    const handleControllerChange = () => {
+      if (activeCallId) {
+        reloadAfterCallForUpdateRef.current = true;
+      } else {
+        window.location.reload();
+      }
+    };
+    navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    return () => navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+  }, [activeCallId]);
+
+  useEffect(() => {
+    if (!activeCallId && reloadAfterCallForUpdateRef.current) window.location.reload();
+  }, [activeCallId]);
 
   const registerFinishCall = useCallback((finish: (() => Promise<void>) | null) => {
     finishCallRef.current = finish;

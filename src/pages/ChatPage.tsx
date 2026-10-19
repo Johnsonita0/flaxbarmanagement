@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, MessageCircle, Phone, PhoneOff, Search, Send, Video, X } from "lucide-react";
+import { Check, CheckCheck, MessageCircle, Mic, Phone, PhoneOff, Search, Send, Square, Video, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import PageHeading from "../components/PageHeading";
 import { useToast } from "../components/ToastProvider";
@@ -50,6 +50,10 @@ type CallHistory =
   | { status: "declined"; mode: "audio" | "video" }
   | { status: "ended"; mode: "audio" | "video"; durationSeconds: number };
 
+const voiceMessagePrefix = "__flexbar_voice_message__:";
+const voiceMessagePathPattern = /^([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12})\.(webm|ogg|m4a)$/i;
+const maxVoiceMessageSeconds = 120;
+
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("");
 }
@@ -95,6 +99,47 @@ function formatCallDuration(durationSeconds: number) {
   return `${minutes} min${seconds ? ` ${seconds} sec` : ""}`;
 }
 
+function getVoiceMessagePath(body: string) {
+  if (!body.startsWith(voiceMessagePrefix)) return null;
+  const path = body.slice(voiceMessagePrefix.length);
+  return voiceMessagePathPattern.test(path) ? path : null;
+}
+
+function VoiceMessage({ path }: { path: string }) {
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setAudioUrl(null);
+    setError("");
+    if (!supabase) {
+      setError("Voice messages are unavailable because chat storage is not configured.");
+      return () => { active = false; };
+    }
+    void supabase.storage.from("chat-voice-messages").createSignedUrl(path, 60 * 60)
+      .then(({ data, error: signedUrlError }) => {
+        if (signedUrlError) throw signedUrlError;
+        if (!data?.signedUrl) throw new Error("The voice message link was not returned.");
+        if (active) setAudioUrl(data.signedUrl);
+      })
+      .catch((loadError: unknown) => {
+        console.error("Could not load a chat voice message.", loadError);
+        if (active) setError("This voice message could not be loaded.");
+      });
+    return () => { active = false; };
+  }, [path]);
+
+  return (
+    <div className="chat-voice-message">
+      <Mic size={15} aria-hidden="true" />
+      {audioUrl
+        ? <audio controls preload="none" src={audioUrl} aria-label="Voice message" />
+        : <span role={error ? "alert" : "status"}>{error || "Loading voice message…"}</span>}
+    </div>
+  );
+}
+
 export default function ChatPage({ user }: { user: CurrentUser }) {
   const [people, setPeople] = useState<ChatPerson[]>([]);
   const [conversations, setConversations] = useState<ChatConversation[]>([]);
@@ -111,6 +156,9 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
+  const [recordingVoice, setRecordingVoice] = useState(false);
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [startingPersonId, setStartingPersonId] = useState<string | null>(null);
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const [typingChannelReady, setTypingChannelReady] = useState(false);
@@ -118,6 +166,11 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const messageRequestId = useRef(0);
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
+  const voiceChunksRef = useRef<Blob[]>([]);
+  const sendVoiceOnStopRef = useRef(false);
+  const recordingStartedAtRef = useRef(0);
   const { startCall } = useInAppCalls();
   const { showToast } = useToast();
 
@@ -308,6 +361,25 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages]);
 
+  useEffect(() => {
+    if (!recordingVoice) return;
+    const timer = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordingStartedAtRef.current) / 1000);
+      setRecordingSeconds(elapsed);
+      if (elapsed >= maxVoiceMessageSeconds) stopVoiceRecording(true);
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [recordingVoice]);
+
+  useEffect(() => () => {
+    const recorder = voiceRecorderRef.current;
+    sendVoiceOnStopRef.current = false;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    voiceRecorderRef.current = null;
+    voiceStreamRef.current = null;
+  }, [conversationId]);
+
   const activeConversation = conversations.find((conversation) => conversation.id === conversationId) ?? null;
   const filteredConversations = useMemo(() => {
     const search = conversationSearch.trim().toLocaleLowerCase();
@@ -383,6 +455,127 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     } finally {
       setSending(false);
     }
+  }
+
+  async function sendVoiceMessage(blob: Blob, contentType: string, extension: string) {
+    if (!conversationId || !supabase || sendingVoice) return;
+    if (!blob.size) {
+      setPageError("The recording was empty. Please record your voice message again.");
+      return;
+    }
+    if (blob.size > 15 * 1024 * 1024) {
+      setPageError("This voice message is too large to send. Please record a shorter message.");
+      return;
+    }
+    const targetConversationId = conversationId;
+    const objectPath = `${targetConversationId}/${user.id}/${crypto.randomUUID()}.${extension}`;
+    setSendingVoice(true);
+    setPageError("");
+    let uploaded = false;
+    try {
+      const { error: uploadError } = await supabase.storage.from("chat-voice-messages").upload(objectPath, blob, {
+        contentType,
+        upsert: false,
+      });
+      if (uploadError) throw new Error("The voice message could not be uploaded. Please try again.");
+      uploaded = true;
+      const result = await apiRequest<{ message: ChatMessage; notificationWarning: boolean }>(
+        `/api/v1/chat/conversations/${targetConversationId}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({ body: `${voiceMessagePrefix}${objectPath}` }),
+        },
+      );
+      setMessages((current) => current.some((message) => message.id === result.message.id)
+        ? current
+        : [...current, result.message]);
+      if (result.notificationWarning) {
+        showToast("Your voice message was sent, but the recipient notification could not be delivered.", "error");
+      }
+      await loadConversations();
+    } catch (error: unknown) {
+      console.error("Could not send chat voice message.", error);
+      if (uploaded) {
+        const { error: cleanupError } = await supabase.storage.from("chat-voice-messages").remove([objectPath]);
+        if (cleanupError) console.error("Could not remove a voice upload after its message failed to send.", cleanupError);
+      }
+      setPageError(error instanceof Error ? error.message : "Your voice message could not be sent.");
+    } finally {
+      setSendingVoice(false);
+    }
+  }
+
+  async function startVoiceRecording() {
+    if (!conversationId || recordingVoice || sendingVoice || sending) return;
+    setPageError("");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setPageError("Voice recording is not supported by this browser. Try a current version of Chrome, Edge, or Safari.");
+      return;
+    }
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const formats = [
+        { mimeType: "audio/webm;codecs=opus", extension: "webm" },
+        { mimeType: "audio/ogg;codecs=opus", extension: "ogg" },
+        { mimeType: "audio/mp4", extension: "m4a" },
+        { mimeType: "audio/webm", extension: "webm" },
+        { mimeType: "audio/ogg", extension: "ogg" },
+      ];
+      const format = formats.find((candidate) => MediaRecorder.isTypeSupported(candidate.mimeType));
+      const recorder = format
+        ? new MediaRecorder(stream, { mimeType: format.mimeType })
+        : new MediaRecorder(stream);
+      const contentType = (recorder.mimeType || format?.mimeType || "audio/webm").split(";")[0] ?? "audio/webm";
+      const extension = format?.extension ?? (contentType === "audio/mp4" ? "m4a" : contentType === "audio/ogg" ? "ogg" : "webm");
+      voiceChunksRef.current = [];
+      voiceStreamRef.current = stream;
+      voiceRecorderRef.current = recorder;
+      sendVoiceOnStopRef.current = false;
+      recorder.addEventListener("dataavailable", (event) => {
+        if (event.data.size) voiceChunksRef.current.push(event.data);
+      });
+      recorder.addEventListener("error", () => {
+        sendVoiceOnStopRef.current = false;
+        setPageError("Recording failed. Please check microphone access and try again.");
+        if (recorder.state !== "inactive") recorder.stop();
+      });
+      recorder.addEventListener("stop", () => {
+        const chunks = voiceChunksRef.current;
+        voiceChunksRef.current = [];
+        const shouldSend = sendVoiceOnStopRef.current;
+        sendVoiceOnStopRef.current = false;
+        voiceRecorderRef.current = null;
+        voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+        voiceStreamRef.current = null;
+        setRecordingVoice(false);
+        setRecordingSeconds(0);
+        if (shouldSend && chunks.length) {
+          void sendVoiceMessage(new Blob(chunks, { type: contentType }), contentType, extension);
+        }
+      });
+      recorder.start(250);
+      recordingStartedAtRef.current = Date.now();
+      setRecordingSeconds(0);
+      setRecordingVoice(true);
+    } catch (error: unknown) {
+      stream?.getTracks().forEach((track) => track.stop());
+      console.error("Could not start chat voice recording.", error);
+      setPageError(error instanceof DOMException && error.name === "NotAllowedError"
+        ? "Microphone access was blocked. Allow microphone access in your browser, then try again."
+        : error instanceof Error ? error.message : "The voice recording could not start.");
+    }
+  }
+
+  function stopVoiceRecording(shouldSend: boolean) {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder || recorder.state === "inactive") return;
+    sendVoiceOnStopRef.current = shouldSend;
+    recorder.stop();
+  }
+
+  function formatRecordingTime(seconds: number) {
+    return `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
   }
 
   return (
@@ -479,9 +672,12 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 {!messagesLoading && !messages.length && <p className="empty-state">This is the start of your conversation with {activeConversation.peer.name}.</p>}
                 {messages.map((message) => {
                   const callHistory = getCallHistory(message.body);
+                  const voiceMessagePath = getVoiceMessagePath(message.body);
                   return (
                     <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                      {callHistory ? (
+                      {voiceMessagePath ? (
+                        <VoiceMessage path={voiceMessagePath} />
+                      ) : callHistory ? (
                         <div className={`chat-call-history${callHistory.status === "ended" ? " chat-call-history--ended" : ""}`}>
                           <p>
                             {callHistory.status === "ended" ? <Phone size={14} /> : <PhoneOff size={14} />}
@@ -513,16 +709,43 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                   {typingNames.length === 1 ? `${typingNames[0]} is typing…` : `${typingNames.join(", ")} are typing…`}
                 </p>
               )}
-              <form className="chat-composer" onSubmit={(event) => void sendMessage(event)}>
+              <form className={`chat-composer${recordingVoice ? " chat-composer--recording" : ""}`} onSubmit={(event) => void sendMessage(event)}>
+                {recordingVoice && (
+                  <span className="chat-composer__recording" role="status">
+                    <span className="chat-composer__recording-indicator" />
+                    Recording {formatRecordingTime(recordingSeconds)} / 02:00
+                  </span>
+                )}
                 <input
                   aria-label="Write a message"
                   value={messageText}
                   onChange={(event) => setMessageText(event.target.value)}
-                  placeholder="Write a message…"
+                  placeholder={sendingVoice ? "Sending voice message…" : "Write a message…"}
                   maxLength={4000}
-                  disabled={sending}
+                  disabled={sending || recordingVoice || sendingVoice}
                 />
-                <button type="submit" aria-label="Send message" disabled={!messageText.trim() || sending}>
+                <button
+                  className="chat-composer__voice"
+                  type="button"
+                  aria-label={recordingVoice ? "Stop recording and send voice message" : "Record voice message"}
+                  title={recordingVoice ? "Stop and send recording" : "Record a voice message"}
+                  disabled={!conversationId || sending || sendingVoice}
+                  onClick={() => recordingVoice ? stopVoiceRecording(true) : void startVoiceRecording()}
+                >
+                  {recordingVoice ? <Square size={15} /> : <Mic size={16} />}
+                </button>
+                {recordingVoice && (
+                  <button
+                    className="chat-composer__cancel-recording"
+                    type="button"
+                    aria-label="Cancel voice recording"
+                    title="Cancel recording"
+                    onClick={() => stopVoiceRecording(false)}
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+                <button type="submit" aria-label="Send message" disabled={!messageText.trim() || sending || recordingVoice || sendingVoice}>
                   <Send size={16} />
                 </button>
               </form>
