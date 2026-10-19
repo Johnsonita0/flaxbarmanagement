@@ -17,6 +17,7 @@ import type { CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { getNotificationSection } from "../lib/notifications";
+import { clearDeferredInstallPrompt, getDeferredInstallPrompt, type BeforeInstallPromptEvent } from "../lib/pwa";
 import { roleLabel } from "../lib/roles";
 import DashboardHeader from "../components/DashboardHeader";
 import DashboardSidebar from "../components/DashboardSidebar";
@@ -45,11 +46,6 @@ import { useInAppCalls } from "../components/InAppCalls";
 import "../css/DashboardPage.css";
 
 const AdminUsersPage = lazy(() => import("./AdminUsersPage"));
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
 
 function hasDismissedInstallPrompt(userId: string) {
   try {
@@ -122,7 +118,7 @@ export default function DashboardPage({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredInstallPrompt());
   const [installHelp, setInstallHelp] = useState("");
   const [installPromptDismissed, setInstallPromptDismissed] = useState(() => hasDismissedInstallPrompt(user.id));
   const [pwaInstalled, setPwaInstalled] = useState(() =>
@@ -132,6 +128,7 @@ export default function DashboardPage({
   const [isDepartmentHead, setIsDepartmentHead] = useState(false);
   const [departmentAccessLoaded, setDepartmentAccessLoaded] = useState(false);
   const name = user.displayName?.trim() || user.email?.split("@")[0] || "Flex Bar user";
+  const isAndroid = /android/i.test(navigator.userAgent);
   const firstName = (user.displayName?.trim() || user.email?.split("@")[0] || "there").split(/\s+/)[0];
   const firstNameLabel = firstName.charAt(0).toLocaleUpperCase() + firstName.slice(1);
   const localHour = new Date().getHours();
@@ -163,6 +160,7 @@ export default function DashboardPage({
     }
     await installPrompt.prompt();
     const choice = await installPrompt.userChoice;
+    clearDeferredInstallPrompt();
     setInstallPrompt(null);
     if (choice.outcome === "accepted") setInstallHelp("Flex Bar is being installed.");
   }
@@ -199,19 +197,16 @@ export default function DashboardPage({
     const updateInstalledState = () => setPwaInstalled(
       displayMode.matches || ("standalone" in navigator && navigator.standalone === true),
     );
-    const handleBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallPrompt(event as BeforeInstallPromptEvent);
-    };
+    const handleInstallAvailable = () => setInstallPrompt(getDeferredInstallPrompt());
     const handleAppInstalled = () => {
       setPwaInstalled(true);
       setInstallPrompt(null);
     };
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("flexbar:install-available", handleInstallAvailable);
     window.addEventListener("appinstalled", handleAppInstalled);
     displayMode.addEventListener("change", updateInstalledState);
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("flexbar:install-available", handleInstallAvailable);
       window.removeEventListener("appinstalled", handleAppInstalled);
       displayMode.removeEventListener("change", updateInstalledState);
     };
@@ -388,10 +383,12 @@ export default function DashboardPage({
           <span className="pwa-install-prompt__icon"><Download size={17} /></span>
           <div className="pwa-install-prompt__copy">
             <strong>Install Flex Bar</strong>
-            <span>{installHelp || "Add Flex Bar to your device for quick access and call alerts."}</span>
+            <span>{installHelp || (isAndroid && !installPrompt
+              ? "Waiting for your browser's native install option."
+              : "Add Flex Bar to your device for quick access and call alerts.")}</span>
           </div>
-          <button type="button" onClick={() => void installPwa()}>
-            {installPrompt ? "Install" : "How to install"}
+          <button type="button" disabled={isAndroid && !installPrompt} onClick={() => void installPwa()}>
+            Install
           </button>
           <button className="pwa-install-prompt__close" type="button" onClick={dismissInstallPrompt} aria-label="Close install prompt" title="Close install prompt">
             <X size={16} />

@@ -139,8 +139,7 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
     if (!callPushConfig) return;
     setCallPushSaving(true);
     try {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (!registration) throw new Error("Call alerts are available after opening the deployed Flex Bar app.");
+      const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
       if (callPushConfig.subscribed) {
         await apiRequest("/api/v1/call-push/subscription", {
