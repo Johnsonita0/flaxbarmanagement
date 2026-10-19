@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  Bell,
   CalendarCheck,
   ChartNoAxesCombined,
   ClipboardList,
@@ -118,6 +119,9 @@ export default function DashboardPage({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [actionError, setActionError] = useState(restoration.error);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [deviceNotificationPermission, setDeviceNotificationPermission] = useState<NotificationPermission | null>(
+    () => "Notification" in window ? Notification.permission : null,
+  );
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(() => getDeferredInstallPrompt());
   const [installHelp, setInstallHelp] = useState("");
   const [installPromptDismissed, setInstallPromptDismissed] = useState(() => hasDismissedInstallPrompt(user.id));
@@ -129,6 +133,10 @@ export default function DashboardPage({
   const [departmentAccessLoaded, setDepartmentAccessLoaded] = useState(false);
   const name = user.displayName?.trim() || user.email?.split("@")[0] || "Flex Bar user";
   const isAndroid = /android/i.test(navigator.userAgent);
+  const pushNotificationsSupported = window.isSecureContext
+    && "Notification" in window
+    && "PushManager" in window
+    && "serviceWorker" in navigator;
   const firstName = (user.displayName?.trim() || user.email?.split("@")[0] || "there").split(/\s+/)[0];
   const firstNameLabel = firstName.charAt(0).toLocaleUpperCase() + firstName.slice(1);
   const localHour = new Date().getHours();
@@ -163,6 +171,17 @@ export default function DashboardPage({
     clearDeferredInstallPrompt();
     setInstallPrompt(null);
     if (choice.outcome === "accepted") setInstallHelp("Flex Bar is being installed.");
+  }
+
+  async function requestDeviceNotificationPermission() {
+    try {
+      const permission = await Notification.requestPermission();
+      setDeviceNotificationPermission(permission);
+      navigate("Notifications");
+    } catch (error: unknown) {
+      console.error("Could not request device notification permission.", error);
+      setActionError("Your browser could not request notification permission. Try enabling it in browser settings.");
+    }
   }
 
   function dismissInstallPrompt() {
@@ -379,6 +398,16 @@ export default function DashboardPage({
         onSignOut={() => void signOutAfterEndingCall()}
       />
       <div className="workspace">
+        {pushNotificationsSupported && deviceNotificationPermission === "default" && <aside className="pwa-install-prompt" aria-label="Enable push notifications">
+          <span className="pwa-install-prompt__icon"><Bell size={17} /></span>
+          <div className="pwa-install-prompt__copy">
+            <strong>Enable notifications</strong>
+            <span>Allow alerts, then enable Incoming call alerts in Notifications for push while the app is closed.</span>
+          </div>
+          <button type="button" onClick={() => void requestDeviceNotificationPermission()}>
+            Allow
+          </button>
+        </aside>}
         {!pwaInstalled && !installPromptDismissed && <aside className="pwa-install-prompt" aria-label="Install Flex Bar">
           <span className="pwa-install-prompt__icon"><Download size={17} /></span>
           <div className="pwa-install-prompt__copy">
