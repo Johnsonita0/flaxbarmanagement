@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Check, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Search, UserPlus, Video, VideoOff, Volume2, VolumeX, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
@@ -65,6 +65,20 @@ interface CallPresence {
   name: string;
   role: AppRole;
   avatarPath: string | null;
+  videoEnabled?: boolean;
+}
+
+interface MinimizedCallPosition {
+  left: number;
+  top: number;
+}
+
+interface CallDragStart {
+  pointerId: number;
+  pointerX: number;
+  pointerY: number;
+  left: number;
+  top: number;
 }
 
 interface CallsContextValue {
@@ -165,10 +179,12 @@ function CallRoom({
   const [cameraBusy, setCameraBusy] = useState(false);
   const [muted, setMuted] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [speakerPlaybackBlocked, setSpeakerPlaybackBlocked] = useState(false);
   const [callSeconds, setCallSeconds] = useState(0);
   const [joining, setJoining] = useState(true);
   const [error, setError] = useState("");
   const [minimized, setMinimized] = useState(false);
+  const [minimizedPosition, setMinimizedPosition] = useState<MinimizedCallPosition | null>(null);
   const [showInvitePicker, setShowInvitePicker] = useState(false);
   const [invitePeople, setInvitePeople] = useState<CallInvitePerson[]>([]);
   const [inviteSearch, setInviteSearch] = useState("");
@@ -183,6 +199,8 @@ function CallRoom({
   const remoteStreamsRef = useRef(new Map<string, MediaStream>());
   const candidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const screenRef = useRef<MediaStream | null>(null);
+  const minimizedDragRef = useRef<CallDragStart | null>(null);
+  const remoteAudioElementsRef = useRef(new Map<string, HTMLAudioElement>());
   const cameraOffRef = useRef(true);
   const mutedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -197,6 +215,7 @@ function CallRoom({
     for (const peer of peersRef.current.values()) peer.close();
     peersRef.current.clear();
     remoteStreamsRef.current.clear();
+    remoteAudioElementsRef.current.clear();
     candidatesRef.current.clear();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -363,6 +382,7 @@ function CallRoom({
                   name: room.user.name,
                   role: room.user.role,
                   avatarPath: room.user.avatarPath,
+                  videoEnabled: false,
                 });
                 if (presenceStatus !== "ok") throw new Error("Call presence could not be announced.");
                 if (mountedRef.current) {
@@ -506,6 +526,7 @@ function CallRoom({
       cameraOffRef.current = false;
       setCameraOff(false);
       setLocalStream(new MediaStream(local.getTracks()));
+      await updateCallPresenceVideo(true);
     } catch (cameraError: unknown) {
       console.error("Could not enable in-app call video.", cameraError);
       setError(cameraError instanceof DOMException && cameraError.name === "NotAllowedError"
@@ -547,6 +568,7 @@ function CallRoom({
       cameraOffRef.current = true;
       setCameraOff(true);
       setLocalStream(new MediaStream(local.getTracks()));
+      await updateCallPresenceVideo(false);
       return;
     }
     setError("");
@@ -558,6 +580,87 @@ function CallRoom({
     streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !nextMuted; });
     mutedRef.current = nextMuted;
     setMuted(nextMuted);
+  }
+
+  async function updateCallPresenceVideo(videoEnabled: boolean) {
+    const channel = channelRef.current;
+    if (!channel || !details) return;
+    try {
+      const status = await channel.track({
+        userId: user.id,
+        name: details.user.name,
+        role: details.user.role,
+        avatarPath: details.user.avatarPath,
+        videoEnabled,
+      });
+      if (status !== "ok") {
+        console.error("Could not update in-app call camera status.", status);
+        setError("Your camera changed, but other participants may not see the updated camera status yet.");
+      }
+    } catch (presenceError: unknown) {
+      console.error("Could not update in-app call camera status.", presenceError);
+      setError("Your camera changed, but other participants may not see the updated camera status yet.");
+    }
+  }
+
+  function startMinimizedDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (!minimized || (event.target instanceof Element && event.target.closest("button"))) return;
+    const bounds = event.currentTarget.closest(".call-window")?.getBoundingClientRect();
+    if (!bounds) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    minimizedDragRef.current = {
+      pointerId: event.pointerId,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      left: bounds.left,
+      top: bounds.top,
+    };
+  }
+
+  function moveMinimizedWindow(event: ReactPointerEvent<HTMLElement>) {
+    const drag = minimizedDragRef.current;
+    if (!minimized || !drag || drag.pointerId !== event.pointerId) return;
+    const bounds = event.currentTarget.closest(".call-window")?.getBoundingClientRect();
+    if (!bounds) return;
+    setMinimizedPosition({
+      left: Math.max(0, Math.min(window.innerWidth - bounds.width, drag.left + event.clientX - drag.pointerX)),
+      top: Math.max(0, Math.min(window.innerHeight - bounds.height, drag.top + event.clientY - drag.pointerY)),
+    });
+  }
+
+  function stopMinimizedDrag(event: ReactPointerEvent<HTMLElement>) {
+    if (minimizedDragRef.current?.pointerId !== event.pointerId) return;
+    minimizedDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  }
+
+  function playRemoteAudio() {
+    for (const audio of remoteAudioElementsRef.current.values()) {
+      audio.muted = false;
+      void audio.play().then(() => {
+        setSpeakerPlaybackBlocked(false);
+        setError((current) => current.startsWith("The call is connected, but the browser could not play") ? "" : current);
+      }).catch((playError: unknown) => {
+        console.error("Could not play remote in-app call audio.", playError);
+        setSpeakerPlaybackBlocked(true);
+        setError("The call is connected, but the browser could not play the other participant's voice. Tap “Tap to hear” and check your device volume.");
+      });
+    }
+  }
+
+  function toggleSpeaker() {
+    if (!speakerMuted && speakerPlaybackBlocked) {
+      playRemoteAudio();
+      return;
+    }
+    const nextMuted = !speakerMuted;
+    setSpeakerMuted(nextMuted);
+    if (nextMuted) {
+      for (const audio of remoteAudioElementsRef.current.values()) audio.muted = true;
+    } else playRemoteAudio();
   }
 
   const finishingRef = useRef(false);
@@ -603,9 +706,21 @@ function CallRoom({
   const localVideoTrack = localStream?.getVideoTracks().find((track) => track.readyState === "live" && track.enabled);
 
   return (
-    <div className={`call-overlay${minimized ? " call-overlay--minimized" : ""}`} role="dialog" aria-modal={!minimized} aria-label="In-app call">
+    <div
+      className={`call-overlay${minimized ? " call-overlay--minimized" : ""}`}
+      style={minimizedPosition ? { left: minimizedPosition.left, top: minimizedPosition.top, right: "auto", bottom: "auto" } : undefined}
+      role="dialog"
+      aria-modal={!minimized}
+      aria-label="In-app call"
+    >
       <section className={`call-window${soloCall ? " call-window--solo" : ""}${minimized ? " call-window--minimized" : ""}`}>
-        <header className="call-window__header">
+        <header
+          className="call-window__header"
+          onPointerDown={startMinimizedDrag}
+          onPointerMove={moveMinimizedWindow}
+          onPointerUp={stopMinimizedDrag}
+          onPointerCancel={stopMinimizedDrag}
+        >
           <div className="call-window__identity">
             <strong>{remoteName}</strong>
             <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Ringing…" : "Waiting for answer…"}</small>
@@ -631,7 +746,10 @@ function CallRoom({
           <button
             className="call-window__minimize"
             type="button"
-            onClick={() => setMinimized((current) => !current)}
+            onClick={() => {
+              setMinimizedPosition(null);
+              setMinimized((current) => !current);
+            }}
             aria-label={minimized ? "Restore call" : "Minimize call"}
             title={minimized ? "Restore call" : "Minimize call"}
           >
@@ -642,7 +760,8 @@ function CallRoom({
         <div className={`call-window__tiles${soloCall ? " call-window__tiles--solo" : ""}`}>
           {participants.map((participant) => {
             const remote = remoteStreams[participant.userId];
-            const hasVideo = remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted);
+            const hasVideo = participant.videoEnabled !== false
+              && remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted);
             return (
               <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}${portraitVideos[participant.userId] ? " call-tile--portrait" : ""}`} key={participant.userId}>
                 {hasVideo
@@ -659,7 +778,25 @@ function CallRoom({
                     avatarPath={participant.avatarPath ?? details?.participants.find((person) => person.id === participant.userId)?.avatarPath ?? null}
                     large
                   />}
-                <audio autoPlay muted={speakerMuted} ref={(node) => { if (node) node.srcObject = remote ?? null; }} />
+                <audio
+                  autoPlay
+                  playsInline
+                  muted={speakerMuted}
+                  ref={(node) => {
+                    if (!node) {
+                      remoteAudioElementsRef.current.delete(participant.userId);
+                      return;
+                    }
+                    remoteAudioElementsRef.current.set(participant.userId, node);
+                    if (node.srcObject !== (remote ?? null)) node.srcObject = remote ?? null;
+                    if (!speakerMuted) {
+                      void node.play().catch((playError: unknown) => {
+                        console.error("Could not start remote in-app call audio.", playError);
+                        setSpeakerPlaybackBlocked(true);
+                      });
+                    }
+                  }}
+                />
                 <strong><span className="call-tile__audio-indicator" />{participant.name}</strong>
               </article>
             );
@@ -675,7 +812,7 @@ function CallRoom({
               <small>{joining ? "Securing connection…" : "Ringing…"}</small>
             </div>
           )}
-          {((localVideoTrack && !cameraOff) || minimized) && (
+          {((localVideoTrack && !cameraOff) || minimized || details?.call.mediaMode === "video") && (
             <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}${portraitVideos[user.id] ? " call-tile--portrait" : ""}`}>
               {localVideoTrack && !cameraOff
                 ? <CallVideo
@@ -693,7 +830,7 @@ function CallRoom({
         </div>
         <footer className="call-window__controls">
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
-          <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={() => setSpeakerMuted((value) => !value)} aria-label={speakerMuted ? "Turn speaker on" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>
+          <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={toggleSpeaker} aria-label={speakerMuted ? "Turn speaker on" : speakerPlaybackBlocked ? "Play call audio" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : speakerPlaybackBlocked ? "Tap to hear" : "Speaker"}</small></button>
           <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Start video" : "Stop video"}</small></button>
           <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={isGroupCall ? "Leave group call" : "End call for everyone"}><span><PhoneOff size={21} /></span><small>{isGroupCall ? "Leave call" : "End call"}</small></button>
         </footer>

@@ -240,7 +240,8 @@
   box-shadow: 0 12px 38px rgba(0, 0, 0, .38);
   pointer-events: auto;
 }
-.call-window--minimized .call-window__header { min-height: 36px; justify-content: flex-start; padding-left: 42px; }
+.call-window--minimized .call-window__header { min-height: 36px; justify-content: flex-start; padding-left: 42px; cursor: grab; touch-action: none; }
+.call-window--minimized .call-window__header:active { cursor: grabbing; }
 .call-window--minimized .call-window__identity { align-items: flex-start; margin: 0; text-align: left; }
 .call-window--minimized .call-window__identity strong { max-width: 210px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .call-window--minimized .call-window__identity small { font-size: 11px; }

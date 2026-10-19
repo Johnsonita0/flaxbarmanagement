@@ -222,12 +222,20 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const [typingChannelReady, setTypingChannelReady] = useState(false);
   const messageListRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const messageRequestId = useRef(0);
   const typingChannelRef = useRef<RealtimeChannel | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const voiceRecorderRef = useRef<MediaRecorder | null>(null);
   const voiceStreamRef = useRef<MediaStream | null>(null);
   const voiceChunksRef = useRef<Blob[]>([]);
+
+  useEffect(() => {
+    const input = messageInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+  }, [messageText]);
   const sendVoiceOnStopRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
   const recordingAudioContextRef = useRef<AudioContext | null>(null);
@@ -820,10 +828,18 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                     </span>
                   </span>
                 )}
-                <input
+                <textarea
+                  ref={messageInputRef}
+                  rows={1}
                   aria-label="Write a message"
                   value={messageText}
                   onChange={(event) => setMessageText(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+                      event.preventDefault();
+                      event.currentTarget.form?.requestSubmit();
+                    }
+                  }}
                   placeholder={sendingVoice ? "Sending voice message…" : "Write a message…"}
                   maxLength={4000}
                   disabled={sending || recordingVoice || sendingVoice}
