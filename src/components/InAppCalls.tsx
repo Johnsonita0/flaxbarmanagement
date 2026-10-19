@@ -12,7 +12,7 @@ type MediaMode = "audio" | "video";
 interface CallInvitation {
   id: string;
   callerName: string;
-  callerPosition: "Admin" | "Manager" | "Staff";
+  callerDepartment: string;
   callerAvatarPath: string | null;
   mediaMode: MediaMode;
   createdAt: string;
@@ -100,12 +100,28 @@ function getRealtimeErrorDetail(error: unknown) {
   return "Supabase Realtime returned no error details.";
 }
 
-function CallVideo({ stream, muted = false }: { stream: MediaStream | null; muted?: boolean }) {
+function CallVideo({
+  stream,
+  muted = false,
+  onDimensions,
+}: {
+  stream: MediaStream | null;
+  muted?: boolean;
+  onDimensions?: (width: number, height: number) => void;
+}) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (ref.current) ref.current.srcObject = stream;
   }, [stream]);
-  return <video ref={ref} autoPlay playsInline muted={muted} />;
+  return (
+    <video
+      ref={ref}
+      autoPlay
+      playsInline
+      muted={muted}
+      onLoadedMetadata={(event) => onDimensions?.(event.currentTarget.videoWidth, event.currentTarget.videoHeight)}
+    />
+  );
 }
 
 function CallAvatar({ name, avatarPath, large = false }: { name: string; avatarPath: string | null; large?: boolean }) {
@@ -140,6 +156,7 @@ function CallRoom({
   const [details, setDetails] = useState<CallRoomDetails | null>(null);
   const [participants, setParticipants] = useState<CallPresence[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [portraitVideos, setPortraitVideos] = useState<Record<string, boolean>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [cameraOff, setCameraOff] = useState(true);
   const [cameraBusy, setCameraBusy] = useState(false);
@@ -587,9 +604,9 @@ function CallRoom({
           <div className="call-window__identity">
             <strong>{remoteName}</strong>
             <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Ringing…" : "Waiting for answer…"}</small>
+            <span className="call-window__secure">🔒 End-to-end private</span>
           </div>
           <div className="call-window__header-actions">
-            <span className="call-window__secure">🔒 End-to-end private</span>
             <button
               className="call-window__invite"
               type="button"
@@ -622,9 +639,16 @@ function CallRoom({
             const remote = remoteStreams[participant.userId];
             const hasVideo = remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted);
             return (
-              <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}`} key={participant.userId}>
+              <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}${portraitVideos[participant.userId] ? " call-tile--portrait" : ""}`} key={participant.userId}>
                 {hasVideo
-                  ? <CallVideo stream={remote ?? null} muted />
+                  ? <CallVideo
+                    stream={remote ?? null}
+                    muted
+                    onDimensions={(width, height) => setPortraitVideos((current) => ({
+                      ...current,
+                      [participant.userId]: height > width,
+                    }))}
+                  />
                   : <CallAvatar
                     name={participant.name}
                     avatarPath={participant.avatarPath ?? details?.participants.find((person) => person.id === participant.userId)?.avatarPath ?? null}
@@ -647,8 +671,15 @@ function CallRoom({
             </div>
           )}
           {localVideoTrack && !cameraOff && (
-            <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}`}>
-              <CallVideo stream={localStream} muted />
+            <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}${portraitVideos[user.id] ? " call-tile--portrait" : ""}`}>
+              <CallVideo
+                stream={localStream}
+                muted
+                onDimensions={(width, height) => setPortraitVideos((current) => ({
+                  ...current,
+                  [user.id]: height > width,
+                }))}
+              />
               <strong>You</strong>
             </article>
           )}
@@ -939,7 +970,7 @@ export function InAppCallsProvider({ user, children }: { user: CurrentUser; chil
         <div className="call-incoming" role="dialog" aria-modal="true" aria-label="Incoming call">
           <IncomingCallerAvatar name={incoming.callerName} avatarPath={incoming.callerAvatarPath} />
           <strong>{incoming.callerName} is calling</strong>
-          <span>{incoming.callerPosition} · {incoming.mediaMode === "video" ? "Video call" : "Voice call"}</span>
+          <span>{incoming.callerDepartment} · {incoming.mediaMode === "video" ? "Video call" : "Voice call"}</span>
           <div className="call-incoming__actions">
             <button className="button button--danger" type="button" onClick={() => void decline(incoming)}><PhoneOff size={17} />Decline</button>
             <button className="button button--primary" type="button" onClick={() => void answer(incoming)}><Phone size={17} />Answer</button>

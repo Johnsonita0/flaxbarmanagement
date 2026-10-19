@@ -193,6 +193,10 @@
 .chat-missed-call { display: grid; gap: 8px; min-width: 130px; }
 .chat-missed-call p { display: flex; align-items: center; gap: 7px; margin: 0; color: #9c3e42; font-weight: 600; }
 .chat-missed-call button { width: fit-content; display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 0; border-radius: 7px; color: #fff; background: #1768aa; font-size: 9px; cursor: pointer; }
+.chat-call-history { display: grid; gap: 8px; min-width: 130px; }
+.chat-call-history p { display: flex; align-items: center; gap: 7px; margin: 0; color: #9c3e42; font-weight: 600; }
+.chat-call-history--ended p { color: #27634a; }
+.chat-call-history button { width: fit-content; display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border: 0; border-radius: 7px; color: #fff; background: #1768aa; font-size: 9px; cursor: pointer; }
 .chat-typing-indicator { margin: 0; padding: 0 13px 7px; color: #2770ae; font-size: 9px; font-style: italic; }
 .chat-composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #edf1f5; }
 .chat-composer input { min-width: 0; flex: 1; padding: 0 11px; border: 1px solid #e4eaf0; border-radius: 8px; outline: none; color: #334a62; font-size: 10px; }

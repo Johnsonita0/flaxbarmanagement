@@ -45,6 +45,11 @@ interface ChatTypingPresence {
   typing: boolean;
 }
 
+type CallHistory =
+  | { status: "missed"; mode: "audio" | "video" }
+  | { status: "declined"; mode: "audio" | "video" }
+  | { status: "ended"; mode: "audio" | "video"; durationSeconds: number };
+
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toLocaleUpperCase()).join("");
 }
@@ -64,9 +69,30 @@ function formatTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
 }
 
-function getMissedCallMode(body: string): "audio" | "video" | null {
-  const match = /^__flexbar_missed_call__:(audio|video):[0-9a-f-]{36}$/i.exec(body);
-  return match?.[1] === "audio" || match?.[1] === "video" ? match[1] : null;
+function getCallHistory(body: string): CallHistory | null {
+  const missed = /^__flexbar_missed_call__:(audio|video):[0-9a-f-]{36}$/i.exec(body);
+  if (missed?.[1] === "audio" || missed?.[1] === "video") {
+    return { status: "missed", mode: missed[1] };
+  }
+  const declined = /^__flexbar_call_declined__:(audio|video):[0-9a-f-]{36}$/i.exec(body);
+  if (declined?.[1] === "audio" || declined?.[1] === "video") {
+    return { status: "declined", mode: declined[1] };
+  }
+  const ended = /^__flexbar_call_ended__:(audio|video):[0-9a-f-]{36}:(\d+)$/i.exec(body);
+  if ((ended?.[1] === "audio" || ended?.[1] === "video") && ended[2]) {
+    const durationSeconds = Number(ended[2]);
+    if (Number.isSafeInteger(durationSeconds)) {
+      return { status: "ended", mode: ended[1], durationSeconds };
+    }
+  }
+  return null;
+}
+
+function formatCallDuration(durationSeconds: number) {
+  const minutes = Math.floor(durationSeconds / 60);
+  const seconds = durationSeconds % 60;
+  if (!minutes) return `${seconds} sec`;
+  return `${minutes} min${seconds ? ` ${seconds} sec` : ""}`;
 }
 
 export default function ChatPage({ user }: { user: CurrentUser }) {
@@ -451,24 +477,36 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
               <div className="message-list" ref={messageListRef} aria-live="polite">
                 {messagesLoading && !messages.length && <p className="empty-state">Loading messages…</p>}
                 {!messagesLoading && !messages.length && <p className="empty-state">This is the start of your conversation with {activeConversation.peer.name}.</p>}
-                {messages.map((message) => (
-                  <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                    {getMissedCallMode(message.body) ? (
-                      <div className="chat-missed-call">
-                        <p><PhoneOff size={14} />Missed {getMissedCallMode(message.body) === "video" ? "video" : "voice"} call</p>
-                        <button type="button" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], getMissedCallMode(message.body) ?? "audio")}>
-                          <Phone size={13} />Call back
-                        </button>
+                {messages.map((message) => {
+                  const callHistory = getCallHistory(message.body);
+                  return (
+                    <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
+                      {callHistory ? (
+                        <div className={`chat-call-history${callHistory.status === "ended" ? " chat-call-history--ended" : ""}`}>
+                          <p>
+                            {callHistory.status === "ended" ? <Phone size={14} /> : <PhoneOff size={14} />}
+                            {callHistory.status === "missed"
+                              ? `Missed ${callHistory.mode === "video" ? "video" : "voice"} call`
+                              : callHistory.status === "declined"
+                                ? `${message.fromMe ? "You declined" : `${activeConversation.peer.name} declined your`} ${callHistory.mode === "video" ? "video" : "voice"} call`
+                                : `${callHistory.mode === "video" ? "Video" : "Voice"} call ended · ${formatCallDuration(callHistory.durationSeconds)}`}
+                          </p>
+                          {callHistory.status !== "ended" && (
+                            <button type="button" disabled={startingCall} onClick={() => void startCallWith([activeConversation.peer.id], callHistory.mode)}>
+                              <Phone size={13} />Call back
+                            </button>
+                          )}
+                        </div>
+                      ) : <p>{message.body}</p>}
+                      <div className="chat-bubble__meta">
+                        <time>{formatTime(message.createdAt)}</time>
+                        {message.fromMe && (message.deliveredAt
+                          ? <CheckCheck className="chat-message-receipt chat-message-receipt--delivered" size={13} aria-label="Delivered" />
+                          : <Check className="chat-message-receipt" size={13} aria-label="Sent" />)}
                       </div>
-                    ) : <p>{message.body}</p>}
-                    <div className="chat-bubble__meta">
-                      <time>{formatTime(message.createdAt)}</time>
-                      {message.fromMe && (message.deliveredAt
-                        ? <CheckCheck className="chat-message-receipt chat-message-receipt--delivered" size={13} aria-label="Delivered" />
-                        : <Check className="chat-message-receipt" size={13} aria-label="Sent" />)}
-                    </div>
-                  </article>
-                ))}
+                    </article>
+                  );
+                })}
               </div>
               {typingNames.length > 0 && (
                 <p className="chat-typing-indicator" aria-live="polite">
