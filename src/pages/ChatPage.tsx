@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, CheckCheck, MessageCircle, Mic, Phone, PhoneOff, Search, Send, Square, Video, X } from "lucide-react";
+import { Check, CheckCheck, MessageCircle, Mic, Pause, Phone, PhoneOff, Play, Search, Send, Video, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import PageHeading from "../components/PageHeading";
 import { useToast } from "../components/ToastProvider";
@@ -92,6 +92,16 @@ function getCallHistory(body: string): CallHistory | null {
   return null;
 }
 
+function isInternalCallHistory(body: string) {
+  return body.startsWith("__flexbar_missed_call__:") ||
+    body.startsWith("__flexbar_call_declined__:") ||
+    body.startsWith("__flexbar_call_ended__:");
+}
+
+function isVoiceMessage(body: string) {
+  return body.startsWith(voiceMessagePrefix);
+}
+
 function formatCallDuration(durationSeconds: number) {
   const minutes = Math.floor(durationSeconds / 60);
   const seconds = durationSeconds % 60;
@@ -108,6 +118,10 @@ function getVoiceMessagePath(body: string) {
 function VoiceMessage({ path }: { path: string }) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -130,12 +144,56 @@ function VoiceMessage({ path }: { path: string }) {
     return () => { active = false; };
   }, [path]);
 
+  const displayDuration = duration || currentTime;
+  const progress = duration > 0 ? currentTime / duration : 0;
   return (
     <div className="chat-voice-message">
-      <Mic size={15} aria-hidden="true" />
-      {audioUrl
-        ? <audio controls preload="none" src={audioUrl} aria-label="Voice message" />
-        : <span role={error ? "alert" : "status"}>{error || "Loading voice message…"}</span>}
+      <button
+        type="button"
+        className="chat-voice-message__play"
+        aria-label={playing ? "Pause voice message" : "Play voice message"}
+        disabled={!audioUrl}
+        onClick={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          if (audio.paused) {
+            void audio.play().catch((playError: unknown) => {
+              console.error("Could not play a chat voice message.", playError);
+              setError("This voice message could not be played.");
+            });
+          } else {
+            audio.pause();
+          }
+        }}
+      >
+        {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+      </button>
+      {audioUrl ? (
+        <>
+          <audio
+            ref={audioRef}
+            preload="metadata"
+            src={audioUrl}
+            onLoadedMetadata={(event) => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)}
+            onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
+            onPlay={() => setPlaying(true)}
+            onPause={() => setPlaying(false)}
+            onEnded={() => { setPlaying(false); setCurrentTime(0); }}
+            onError={() => setError("This voice message could not be played.")}
+          />
+          <div className="chat-voice-message__track" aria-label="Voice message audio">
+            <div className="chat-voice-message__waveform" aria-hidden="true">
+              {Array.from({ length: 36 }, (_, index) => {
+                const height = 20 + ((index * 17 + 13) % 67);
+                return <span key={index} className={index / 36 <= progress ? "is-played" : ""} style={{ height: `${height}%` }} />;
+              })}
+            </div>
+            <small>{formatCallDuration(Math.floor(displayDuration))}</small>
+          </div>
+        </>
+      ) : (
+        <span role={error ? "alert" : "status"}>{error || "Loading voice message…"}</span>
+      )}
     </div>
   );
 }
@@ -159,6 +217,7 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const [recordingVoice, setRecordingVoice] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingAmplitude, setRecordingAmplitude] = useState(0.08);
   const [startingPersonId, setStartingPersonId] = useState<string | null>(null);
   const [typingNames, setTypingNames] = useState<string[]>([]);
   const [typingChannelReady, setTypingChannelReady] = useState(false);
@@ -171,6 +230,8 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
   const voiceChunksRef = useRef<Blob[]>([]);
   const sendVoiceOnStopRef = useRef(false);
   const recordingStartedAtRef = useRef(0);
+  const recordingAudioContextRef = useRef<AudioContext | null>(null);
+  const recordingAnimationRef = useRef<number | null>(null);
   const { startCall } = useInAppCalls();
   const { showToast } = useToast();
 
@@ -376,8 +437,13 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     sendVoiceOnStopRef.current = false;
     if (recorder && recorder.state !== "inactive") recorder.stop();
     voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
+    if (recordingAnimationRef.current !== null) cancelAnimationFrame(recordingAnimationRef.current);
+    if (recordingAudioContextRef.current && recordingAudioContextRef.current.state !== "closed") {
+      void recordingAudioContextRef.current.close();
+    }
     voiceRecorderRef.current = null;
     voiceStreamRef.current = null;
+    recordingAudioContextRef.current = null;
   }, [conversationId]);
 
   const activeConversation = conversations.find((conversation) => conversation.id === conversationId) ?? null;
@@ -515,6 +581,19 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new AudioContext();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      audioContext.createMediaStreamSource(stream).connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      const updateWaveform = () => {
+        analyser.getByteTimeDomainData(samples);
+        const sum = samples.reduce((total, sample) => total + ((sample - 128) / 128) ** 2, 0);
+        setRecordingAmplitude(Math.min(1, Math.sqrt(sum / samples.length) * 4));
+        recordingAnimationRef.current = requestAnimationFrame(updateWaveform);
+      };
+      recordingAudioContextRef.current = audioContext;
+      updateWaveform();
       const formats = [
         { mimeType: "audio/webm;codecs=opus", extension: "webm" },
         { mimeType: "audio/ogg;codecs=opus", extension: "ogg" },
@@ -548,8 +627,15 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
         voiceRecorderRef.current = null;
         voiceStreamRef.current?.getTracks().forEach((track) => track.stop());
         voiceStreamRef.current = null;
+        if (recordingAnimationRef.current !== null) cancelAnimationFrame(recordingAnimationRef.current);
+        recordingAnimationRef.current = null;
+        if (recordingAudioContextRef.current && recordingAudioContextRef.current.state !== "closed") {
+          void recordingAudioContextRef.current.close();
+        }
+        recordingAudioContextRef.current = null;
         setRecordingVoice(false);
         setRecordingSeconds(0);
+        setRecordingAmplitude(0.08);
         if (shouldSend && chunks.length) {
           void sendVoiceMessage(new Blob(chunks, { type: contentType }), contentType, extension);
         }
@@ -560,6 +646,12 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
       setRecordingVoice(true);
     } catch (error: unknown) {
       stream?.getTracks().forEach((track) => track.stop());
+      if (recordingAnimationRef.current !== null) cancelAnimationFrame(recordingAnimationRef.current);
+      recordingAnimationRef.current = null;
+      if (recordingAudioContextRef.current && recordingAudioContextRef.current.state !== "closed") {
+        void recordingAudioContextRef.current.close();
+      }
+      recordingAudioContextRef.current = null;
       console.error("Could not start chat voice recording.", error);
       setPageError(error instanceof DOMException && error.name === "NotAllowedError"
         ? "Microphone access was blocked. Allow microphone access in your browser, then try again."
@@ -673,10 +765,13 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                 {messages.map((message) => {
                   const callHistory = getCallHistory(message.body);
                   const voiceMessagePath = getVoiceMessagePath(message.body);
+                  const voiceMessage = isVoiceMessage(message.body);
                   return (
                     <article className={`chat-bubble ${message.fromMe ? "chat-bubble--mine" : "chat-bubble--other"}`} key={message.id}>
-                      {voiceMessagePath ? (
-                        <VoiceMessage path={voiceMessagePath} />
+                      {voiceMessage ? (
+                        voiceMessagePath
+                          ? <VoiceMessage path={voiceMessagePath} />
+                          : <div className="chat-voice-message chat-voice-message--error"><Mic size={15} /><span role="alert">This voice message could not be loaded.</span></div>
                       ) : callHistory ? (
                         <div className={`chat-call-history${callHistory.status === "ended" ? " chat-call-history--ended" : ""}`}>
                           <p>
@@ -693,7 +788,9 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                             </button>
                           )}
                         </div>
-                      ) : <p>{message.body}</p>}
+                      ) : isInternalCallHistory(message.body)
+                        ? <div className="chat-call-history"><p><Phone size={14} />Call history</p></div>
+                        : <p>{message.body}</p>}
                       <div className="chat-bubble__meta">
                         <time>{formatTime(message.createdAt)}</time>
                         {message.fromMe && (message.deliveredAt
@@ -711,9 +808,16 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
               )}
               <form className={`chat-composer${recordingVoice ? " chat-composer--recording" : ""}`} onSubmit={(event) => void sendMessage(event)}>
                 {recordingVoice && (
-                  <span className="chat-composer__recording" role="status">
+                  <span className="chat-composer__recording" role="status" aria-label={`Recording voice message, ${formatRecordingTime(recordingSeconds)}`}>
                     <span className="chat-composer__recording-indicator" />
-                    Recording {formatRecordingTime(recordingSeconds)} / 02:00
+                    <span className="chat-composer__recording-time">{formatRecordingTime(recordingSeconds)}</span>
+                    <span className="chat-composer__waveform" aria-hidden="true">
+                      {Array.from({ length: 28 }, (_, index) => {
+                        const baseHeight = 20 + ((index * 23 + 11) % 61);
+                        const height = baseHeight * (0.55 + recordingAmplitude);
+                        return <span key={index} style={{ height: `${Math.min(100, height)}%` }} />;
+                      })}
+                    </span>
                   </span>
                 )}
                 <input
@@ -724,30 +828,33 @@ export default function ChatPage({ user }: { user: CurrentUser }) {
                   maxLength={4000}
                   disabled={sending || recordingVoice || sendingVoice}
                 />
-                <button
-                  className="chat-composer__voice"
-                  type="button"
-                  aria-label={recordingVoice ? "Stop recording and send voice message" : "Record voice message"}
-                  title={recordingVoice ? "Stop and send recording" : "Record a voice message"}
-                  disabled={!conversationId || sending || sendingVoice}
-                  onClick={() => recordingVoice ? stopVoiceRecording(true) : void startVoiceRecording()}
-                >
-                  {recordingVoice ? <Square size={15} /> : <Mic size={16} />}
-                </button>
-                {recordingVoice && (
+                {recordingVoice ? (
                   <button
-                    className="chat-composer__cancel-recording"
+                    className="chat-composer__send-voice"
                     type="button"
-                    aria-label="Cancel voice recording"
-                    title="Cancel recording"
-                    onClick={() => stopVoiceRecording(false)}
+                    aria-label="Send voice message"
+                    title="Send voice message"
+                    onClick={() => stopVoiceRecording(true)}
                   >
-                    <X size={16} />
+                    <Send size={16} />
                   </button>
+                ) : (
+                  <>
+                    <button
+                      className="chat-composer__voice"
+                      type="button"
+                      aria-label="Record voice message"
+                      title="Record a voice message"
+                      disabled={!conversationId || sending || sendingVoice}
+                      onClick={() => void startVoiceRecording()}
+                    >
+                      <Mic size={16} />
+                    </button>
+                    <button type="submit" aria-label="Send message" disabled={!messageText.trim() || sending || sendingVoice}>
+                      <Send size={16} />
+                    </button>
+                  </>
                 )}
-                <button type="submit" aria-label="Send message" disabled={!messageText.trim() || sending || recordingVoice || sendingVoice}>
-                  <Send size={16} />
-                </button>
               </form>
             </>
           ) : (
