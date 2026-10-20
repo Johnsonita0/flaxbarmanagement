@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, CircleCheck } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Bell, CircleCheck, MapPin } from "lucide-react";
 import { apiRequest } from "../lib/api";
 import { useToast } from "../components/ToastProvider";
 import { getNotificationSection } from "../lib/notifications";
@@ -58,7 +58,13 @@ function relativeTime(value: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
 }
 
-export default function NotificationsPage({ onOpenSection }: { onOpenSection: (section: DashboardSection) => void }) {
+export default function NotificationsPage({
+  isAdministrator,
+  onOpenSection,
+}: {
+  isAdministrator: boolean;
+  onOpenSection: (section: DashboardSection) => void;
+}) {
   const { showToast } = useToast();
   const [filter, setFilter] = useState("All");
   const [notifications, setNotifications] = useState<WorkspaceNotification[]>([]);
@@ -66,6 +72,7 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [openingNotificationId, setOpeningNotificationId] = useState<string | null>(null);
+  const [expandedNotificationId, setExpandedNotificationId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [callPushConfig, setCallPushConfig] = useState<CallPushConfig | null>(null);
   const [callPushError, setCallPushError] = useState("");
@@ -113,12 +120,18 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
   }, [callPushSupported, showToast]);
 
   const categories = useMemo(
-    () => [...new Set(notifications.map((notification) => notificationCategory(notification.type)))].sort(),
+    () => [...new Set(notifications
+      .filter((notification) => !["system_error", "attendance_geofence_violation"].includes(notification.type))
+      .map((notification) => notificationCategory(notification.type)))].sort(),
     [notifications],
   );
-  const visibleNotifications = filter === "All"
-    ? notifications
-    : notifications.filter((notification) => notificationCategory(notification.type) === filter);
+  const filters = ["All", ...(isAdministrator ? ["System errors", "Geofencing"] : []), ...categories];
+  const visibleNotifications = notifications.filter((notification) => {
+    if (filter === "All") return true;
+    if (filter === "System errors") return notification.type === "system_error";
+    if (filter === "Geofencing") return notification.type === "attendance_geofence_violation";
+    return notificationCategory(notification.type) === filter;
+  });
 
   async function openNotification(notification: WorkspaceNotification) {
     setOpeningNotificationId(notification.id);
@@ -130,6 +143,10 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
           : item));
         setUnreadCount((count) => Math.max(0, count - 1));
         window.dispatchEvent(new Event("flexbar:notification-read"));
+      }
+      if (notification.type === "system_error" || notification.type === "attendance_geofence_violation") {
+        setExpandedNotificationId((current) => current === notification.id ? null : notification.id);
+        return;
       }
       onOpenSection(getNotificationSection(notification.type));
     } catch (reason: unknown) {
@@ -235,16 +252,16 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
 
   return (
     <section className="module-page">
-      <PageHeading title="Notifications" description="Updates sent to your account about work and operations." />
+      <PageHeading title="Notification inbox" description="Workspace updates, geofence alerts, and system messages delivered to your account." />
       {error && <div className="alert alert--error" role="alert">{error}</div>}
       <div className="surface-card notification-summary">
         <div className="surface-card__heading">
-          <div><h2>All notifications</h2><p>Sales and other updates delivered to your account</p></div>
+          <div><h2>All notifications</h2><p>Open an alert to read its full details.</p></div>
           <span className="status-pill status-pill--neutral">{unreadCount} unread</span>
         </div>
         <div className="notification-controls">
           <div className="tab-strip">
-            {["All", ...categories].map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} type="button" onClick={() => setFilter(tab)}>{tab}</button>)}
+            {filters.map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} type="button" onClick={() => setFilter(tab)}>{tab}</button>)}
           </div>
           <div className="notification-actions">
             {devicePermission !== null
@@ -276,12 +293,32 @@ export default function NotificationsPage({ onOpenSection }: { onOpenSection: (s
         </div>
       </div>
       <div className="surface-card record-list">
-        {loading ? <p className="empty-state">Loading notifications…</p> : visibleNotifications.map((item) => <button className={`record-row record-row--button${item.readAt ? "" : " notification-row--unread"}`} key={item.id} type="button" onClick={() => void openNotification(item)} disabled={openingNotificationId !== null}>
-          <span className="task-icon task-icon--green"><Bell size={17} /></span>
-          <span className="record-row__main"><strong>{item.title}</strong><small>{notificationCategory(item.type)} · {item.detail}</small></span>
-          <span className="record-row__meta">{openingNotificationId === item.id ? "Opening…" : relativeTime(item.createdAt)}</span>
-          {!item.readAt && <span className="notification-indicator" aria-label="Unread" />}
-        </button>)}
+        {loading ? <p className="empty-state">Loading notifications…</p> : visibleNotifications.map((item) => {
+          const isSystemError = item.type === "system_error";
+          const isGeofenceAlert = item.type === "attendance_geofence_violation";
+          const isExpanded = expandedNotificationId === item.id;
+          return <Fragment key={item.id}>
+            <button
+              className={`record-row record-row--button${item.readAt ? "" : " notification-row--unread"}${isSystemError || isGeofenceAlert ? " notification-row--system" : ""}`}
+              type="button"
+              onClick={() => void openNotification(item)}
+              disabled={openingNotificationId !== null}
+              aria-expanded={isSystemError || isGeofenceAlert ? isExpanded : undefined}
+            >
+              <span className="task-icon task-icon--green">{isSystemError ? <AlertTriangle size={17} /> : isGeofenceAlert ? <MapPin size={17} /> : <Bell size={17} />}</span>
+              <span className="record-row__main">
+                <strong>{item.title}</strong>
+                <small>{isSystemError ? "System error" : isGeofenceAlert ? "Geofencing" : `${notificationCategory(item.type)} · ${item.detail}`}</small>
+              </span>
+              <span className="record-row__meta">{openingNotificationId === item.id ? "Opening…" : relativeTime(item.createdAt)}</span>
+              {!item.readAt && <span className="notification-indicator" aria-label="Unread" />}
+            </button>
+            {isExpanded && <div className="notification-detail-panel">
+              <strong>{isSystemError ? "Full system error message" : "Geofence alert details"}</strong>
+              <pre>{item.detail}</pre>
+            </div>}
+          </Fragment>;
+        })}
         {!loading && visibleNotifications.length === 0 && <p className="empty-state">{notifications.length ? "No notifications match this category." : "You don't have any notifications yet."}</p>}
       </div>
     </section>

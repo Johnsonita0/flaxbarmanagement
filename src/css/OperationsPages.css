@@ -359,6 +359,10 @@
 .sale-modal__actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 11px; }
 .sale-modal__actions .button { min-height: 40px; }
 .notification-row--unread { background: #f5f9fd; }
+.notification-row--system .task-icon { color: #9a5a19; background: #fff4e7; }
+.notification-detail-panel { margin: 0 12px 12px 52px; padding: 13px; border: 1px solid #e8edf1; border-radius: 9px; background: #fbfcfd; }
+.notification-detail-panel > strong { display: block; margin-bottom: 8px; color: #465b70; font-size: 10px; }
+.notification-detail-panel pre { margin: 0; color: #536476; font: 10px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notification-indicator { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #2c80bd; }
 .notification-controls { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-top: 10px; }
 .notification-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 9px; }

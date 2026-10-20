@@ -371,7 +371,7 @@ export default function DashboardPage({
       case "Meeting Room": return <MeetingRoomPage user={user} />;
       case "Chat": return <ChatPage user={user} />;
       case "Reports": return <ReportsPage user={user} />;
-      case "Notifications": return <NotificationsPage onOpenSection={navigate} />;
+      case "Notifications": return <NotificationsPage isAdministrator={user.role === "super_admin" || user.role === "management_admin"} onOpenSection={navigate} />;
       case "Profile":
         return (
           <ProfilePage
