@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, Clock3, MapPin } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { IScannerControls } from "@zxing/browser";
+import { Camera, CheckCircle2, Clock3, MapPin, QrCode } from "lucide-react";
 import { apiRequest } from "../lib/api";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
@@ -50,12 +51,17 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
   const { showToast } = useToast();
   const [view, setView] = useState<"check-in" | "history">(canClockIn ? "check-in" : "history");
   const [geoState, setGeoState] = useState<GeoState>("idle");
-  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
+  const [qrToken, setQrToken] = useState("");
+  const [scanningQr, setScanningQr] = useState(false);
+  const [qrError, setQrError] = useState("");
   const [config, setConfig] = useState<AttendanceConfig | null>(null);
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const scannerVideoRef = useRef<HTMLVideoElement>(null);
+  const scannerControlsRef = useRef<IScannerControls | null>(null);
 
   const loadAttendance = useCallback(async () => {
     setLoading(true);
@@ -78,20 +84,62 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
     void loadAttendance();
   }, [loadAttendance]);
 
+  useEffect(() => () => scannerControlsRef.current?.stop(), []);
+
   function locate() {
     if (!navigator.geolocation) {
       setGeoState("error");
       return;
     }
     setGeoState("loading");
+    setCoordinates(null);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
-        setCoordinates({ latitude: coords.latitude, longitude: coords.longitude });
+        setCoordinates({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracyMeters: coords.accuracy,
+        });
         setGeoState("found");
       },
       () => setGeoState("error"),
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
     );
+  }
+
+  async function startQrScan() {
+    const video = scannerVideoRef.current;
+    if (!video) return;
+    setQrError("");
+    setQrToken("");
+    setScanningQr(true);
+    try {
+      const { BrowserQRCodeReader } = await import("@zxing/browser");
+      const reader = new BrowserQRCodeReader();
+      scannerControlsRef.current = await reader.decodeFromVideoDevice(undefined, video, (result, _error, controls) => {
+        if (!result) return;
+        const token = result.getText();
+        if (!token.startsWith("flexbar-attendance:")) {
+          setQrError("That is not a Flex Bar attendance QR code. Scan the code displayed in the business.");
+          return;
+        }
+        controls.stop();
+        scannerControlsRef.current = null;
+        setScanningQr(false);
+        setQrToken(token);
+        setQrError("");
+      });
+    } catch (error: unknown) {
+      console.error("Could not start the attendance QR scanner.", error);
+      setScanningQr(false);
+      setQrError(error instanceof Error ? error.message : "Camera access failed. Allow camera permission and try again.");
+    }
+  }
+
+  function stopQrScan() {
+    scannerControlsRef.current?.stop();
+    scannerControlsRef.current = null;
+    setScanningQr(false);
   }
 
   const currentDate = config ? businessDate(config.timezone) : "";
@@ -106,7 +154,7 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
     try {
       const result = await apiRequest<{ message: string }>(`/api/v1/attendance/${action}`, {
         method: "POST",
-        body: JSON.stringify(coordinates),
+        body: JSON.stringify({ ...coordinates, qrToken }),
       });
       showToast(result.message, "success");
       await loadAttendance();
@@ -129,17 +177,26 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
             <span className="map-preview__pin"><MapPin size={23} fill="currentColor" /></span>
             <span className="map-preview__ring" />
           </div>
-          <div className="location-status"><MapPin size={17} /><div><strong>{config?.configured ? "Business attendance area is ready" : "Business location not configured"}</strong><small>{coordinates ? `Your position: ${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}` : config?.configured ? `Clock-in is allowed within ${config.radiusMeters} metres of the approved location.` : "Ask the super admin to set the business location before clock-in."}</small></div></div>
+          <div className="location-status"><MapPin size={17} /><div><strong>{config?.configured ? "Business attendance area is ready" : "Business location not configured"}</strong><small>{coordinates ? `GPS accuracy: about ${Math.ceil(coordinates.accuracyMeters)} m. Your location must be confirmed within the ${config?.radiusMeters ?? 10} m area.` : config?.configured ? `Attendance is restricted to a 10-metre area around the approved location.` : "Ask the super admin to set the business location before clock-in."}</small></div></div>
           {geoState === "error" && <p className="inline-error" role="alert">Location could not be read. Allow location access and try again.</p>}
           <button className="button button--outline location-button" onClick={locate} disabled={geoState === "loading" || loading}>{geoState === "loading" ? "Checking location…" : "Check my location"}</button>
+          <div className="attendance-qr-check">
+            <div className="attendance-qr-check__heading"><QrCode size={18} /><div><strong>Scan the on-site check-in code</strong><small>The code must be displayed inside the business and refreshes every 30 seconds.</small></div></div>
+            <video className="attendance-qr-check__video" ref={scannerVideoRef} hidden={!scanningQr} muted playsInline aria-label="Camera scanning the on-site attendance QR code" />
+            {qrError && <p className="inline-error" role="alert">{qrError}</p>}
+            {qrToken && <p className="attendance-qr-check__verified" role="status"><CheckCircle2 size={15} /> Current on-site code scanned</p>}
+            {scanningQr
+              ? <button className="button button--outline" type="button" onClick={stopQrScan}>Stop scanning</button>
+              : <button className="button button--outline" type="button" onClick={() => void startQrScan()} disabled={!config?.configured || loading}><Camera size={16} />{qrToken ? "Scan code again" : "Scan QR code"}</button>}
+          </div>
           {todaysRecord?.clockOut ? (
             <button className="button button--primary checkin-button" disabled><CheckCircle2 size={16} /> Shift complete</button>
           ) : todaysRecord ? (
-            <button className="button button--primary checkin-button" onClick={() => void clock("clock-out")} disabled={!config?.configured || !coordinates || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock Out"}</button>
+            <button className="button button--primary checkin-button" onClick={() => void clock("clock-out")} disabled={!config?.configured || !coordinates || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock Out"}</button>
           ) : (
-            <button className="button button--primary checkin-button" onClick={() => void clock("clock-in")} disabled={loading || !config?.configured || !coordinates || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock In"}</button>
+            <button className="button button--primary checkin-button" onClick={() => void clock("clock-in")} disabled={loading || !config?.configured || !coordinates || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock In"}</button>
           )}
-          <div className="secure-note"><CheckCircle2 size={15} /> Your location is checked against the approved business geofence when attendance is recorded.</div>
+          <div className="secure-note"><CheckCircle2 size={15} /> Attendance is recorded only when your precise GPS position is inside the 10-metre geofence and the rotating on-site QR code is valid.</div>
         </div>
       ) : (
         <div className="surface-card">

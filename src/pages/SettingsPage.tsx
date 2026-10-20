@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Check, ChevronRight, Clock3, MapPin, ShieldCheck, SlidersHorizontal, UsersRound, Volume2 } from "lucide-react";
+import { Bell, Check, ChevronRight, Clock3, MapPin, QrCode, ShieldCheck, SlidersHorizontal, UsersRound, Volume2 } from "lucide-react";
 import { adminRequest, apiRequest } from "../lib/api";
 import { getNotificationSoundPreferences, playNotificationTone, saveNotificationSoundPreferences, type NotificationSound, type NotificationSoundPreferences } from "../lib/notificationSounds";
 import PageHeading from "../components/PageHeading";
@@ -51,8 +51,11 @@ export default function SettingsPage({
 }) {
   const [section, setSection] = useState<SettingsSection>("menu");
   const [coordinates, setCoordinates] = useState("");
-  const [radius, setRadius] = useState("100");
+  const [radius, setRadius] = useState("10");
   const [locationTimezone, setLocationTimezone] = useState("Africa/Lagos");
+  const [attendanceQrImage, setAttendanceQrImage] = useState("");
+  const [attendanceQrExpiresAt, setAttendanceQrExpiresAt] = useState<number | null>(null);
+  const [attendanceQrError, setAttendanceQrError] = useState("");
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [soundSettings, setSoundSettings] = useState<NotificationSoundPreferences>({ calls: false, messages: false });
   const [activities, setActivities] = useState<ActivityEntry[]>([]);
@@ -77,7 +80,7 @@ export default function SettingsPage({
           } else {
             setCoordinates("");
           }
-          setRadius(String(value.radiusMeters));
+          setRadius("10");
           setLocationTimezone(value.timezone);
         })
         .catch((reason: unknown) => {
@@ -119,6 +122,49 @@ export default function SettingsPage({
 
     return () => { mounted = false; };
   }, [section, canManage, activityRefresh, userId]);
+
+  useEffect(() => {
+    if (section !== "location" || !canManage || !coordinates) {
+      setAttendanceQrImage("");
+      setAttendanceQrExpiresAt(null);
+      setAttendanceQrError("");
+      return;
+    }
+    let active = true;
+    let requestPending = false;
+    let previousToken = "";
+    const refreshCode = async () => {
+      if (requestPending) return;
+      requestPending = true;
+      try {
+        const result = await apiRequest<{ token: string; expiresAt: number }>("/api/v1/attendance/on-site-code");
+        if (!active) return;
+        if (result.token !== previousToken) {
+          previousToken = result.token;
+          const QRCode = (await import("qrcode")).default;
+          const image = await QRCode.toDataURL(result.token, {
+            width: 240,
+            margin: 2,
+            errorCorrectionLevel: "M",
+          });
+          if (!active) return;
+          setAttendanceQrImage(image);
+        }
+        setAttendanceQrExpiresAt(result.expiresAt);
+        setAttendanceQrError("");
+      } catch (reason: unknown) {
+        if (active) setAttendanceQrError(reason instanceof Error ? reason.message : "The on-site attendance code could not be loaded.");
+      } finally {
+        requestPending = false;
+      }
+    };
+    void refreshCode();
+    const interval = window.setInterval(() => { void refreshCode(); }, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [section, canManage, coordinates]);
 
   function detectLocation() {
     setNotice("");
@@ -266,13 +312,24 @@ export default function SettingsPage({
           <div className="map-preview map-preview--settings"><div className="map-preview__grid" /><span className="map-preview__pin"><MapPin size={23} fill="currentColor" /></span><span className="map-preview__ring" /></div>
           <div className="surface-card form-card">
             <h2>Business Location / Geofence</h2>
-            <p className="form-help">{canManage ? "Set the approved location and radius used to validate staff and management check-ins." : "Attendance is validated against the super-admin approved location."}</p>
+            <p className="form-help">{canManage ? "Set the building's approved GPS pin. Check-in is restricted to a 10-metre area, requires precise GPS, and requires a rotating QR code displayed on-site." : "Attendance requires precise GPS within 10 metres of the approved pin and the rotating on-site QR code."}</p>
             {canManage && <button className="button button--outline" onClick={detectLocation}><MapPin size={16} /> Use this device's location</button>}
             <label>Latitude, longitude<input value={coordinates} onChange={(event) => setCoordinates(event.target.value)} placeholder="e.g. 6.000000, 3.000000" readOnly={!canManage} /></label>
-            <label>Geofence radius (metres)<input type="number" min="25" max="2000" value={radius} onChange={(event) => setRadius(event.target.value)} readOnly={!canManage} /></label>
+            <label>Geofence radius (metres)<input type="number" min="10" max="10" value={radius} readOnly /></label>
             <label>Business timezone<input value={locationTimezone} onChange={(event) => setLocationTimezone(event.target.value)} list="business-timezones" readOnly={!canManage} /><datalist id="business-timezones"><option value="Africa/Lagos" /><option value="Africa/Accra" /><option value="Europe/London" /><option value="UTC" /></datalist></label>
             {canManage && <button className="button button--primary" onClick={() => void saveLocation()} disabled={!coordinates || saving}><Check size={15} />{saving ? "Saving…" : "Save business location"}</button>}
           </div>
+          {canManage && (
+            <div className="surface-card attendance-qr-display">
+              <div className="attendance-qr-display__heading"><QrCode size={19} /><div><h2>On-site attendance QR code</h2><p>Keep this screen visible inside the building. It refreshes every 30 seconds.</p></div></div>
+              {attendanceQrError && <div className="alert alert--error" role="alert">{attendanceQrError}</div>}
+              {attendanceQrImage
+                ? <img className="attendance-qr-display__image" src={attendanceQrImage} alt="Rotating Flex Bar attendance check-in QR code" />
+                : <p className="empty-state">{coordinates ? "Loading the current on-site code…" : "Save the business location to display the on-site code."}</p>}
+              {attendanceQrExpiresAt && <small className="attendance-qr-display__expiry">Current code refreshes at {new Intl.DateTimeFormat(undefined, { timeStyle: "medium" }).format(new Date(attendanceQrExpiresAt))}.</small>}
+              <p className="form-help">A photo or forwarded image of the code could be reused until it expires. Use a live screen that staff can scan at the premises.</p>
+            </div>
+          )}
         </>
       )}
 
