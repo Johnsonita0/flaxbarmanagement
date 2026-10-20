@@ -1,5 +1,5 @@
 import { createContext, type PointerEvent as ReactPointerEvent, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { Check, Maximize2, Mic, MicOff, Minimize2, Phone, PhoneOff, Search, UserPlus, Video, VideoOff, Volume2, VolumeX, X } from "lucide-react";
+import { Check, Headphones, Maximize2, Mic, MicOff, Minimize2, MoreHorizontal, Phone, PhoneOff, ScreenShare, ScreenShareOff, Search, UserPlus, UsersRound, Video, VideoOff, Volume2, VolumeX, X } from "lucide-react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getProfilePhotoUrl, type AppRole, type CurrentUser } from "../lib/api";
 import { apiRequest } from "../lib/api";
@@ -66,6 +66,7 @@ interface CallPresence {
   role: AppRole;
   avatarPath: string | null;
   videoEnabled?: boolean;
+  screenSharing?: boolean;
 }
 
 interface MinimizedCallPosition {
@@ -177,6 +178,9 @@ function CallRoom({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [cameraOff, setCameraOff] = useState(true);
   const [cameraBusy, setCameraBusy] = useState(false);
+  const [screenSharing, setScreenSharing] = useState(false);
+  const [screenBusy, setScreenBusy] = useState(false);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [muted, setMuted] = useState(false);
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [speakerPlaybackBlocked, setSpeakerPlaybackBlocked] = useState(false);
@@ -603,6 +607,96 @@ function CallRoom({
     }
   }
 
+  async function updateCallPresenceScreen(screenSharing: boolean) {
+    const channel = channelRef.current;
+    if (!channel || !details) return;
+    try {
+      const status = await channel.track({
+        userId: user.id,
+        name: details.user.name,
+        role: details.user.role,
+        avatarPath: details.user.avatarPath,
+        videoEnabled: !cameraOffRef.current,
+        screenSharing,
+      });
+      if (status !== "ok") {
+        console.error("Could not update in-app call screen-share status.", status);
+        setError("Your screen-share status could not be updated for other participants.");
+      }
+    } catch (presenceError: unknown) {
+      console.error("Could not update in-app call screen-share status.", presenceError);
+      setError("Your screen-share status could not be updated for other participants.");
+    }
+  }
+
+  async function stopScreenShare() {
+    const activeScreen = screenRef.current;
+    if (!activeScreen) return;
+    screenRef.current = null;
+    activeScreen.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
+    setScreenStream(null);
+    setScreenSharing(false);
+    const cameraTrack = cameraOffRef.current
+      ? null
+      : streamRef.current?.getVideoTracks().find((track) => track.readyState === "live") ?? null;
+    try {
+      await Promise.all([...peersRef.current.values()].map(async (peer) => {
+        const sender = getVideoSender(peer);
+        if (sender) await sender.replaceTrack(cameraTrack);
+      }));
+      await updateCallPresenceScreen(false);
+    } catch (screenError: unknown) {
+      console.error("Could not stop sharing the in-app call screen cleanly.", screenError);
+      if (mountedRef.current) setError("Screen sharing stopped, but another participant may need to reconnect.");
+    }
+  }
+
+  async function toggleScreenShare() {
+    if (screenBusy) return;
+    if (screenRef.current) {
+      setScreenBusy(true);
+      await stopScreenShare();
+      if (mountedRef.current) setScreenBusy(false);
+      return;
+    }
+    if (!window.isSecureContext || !navigator.mediaDevices?.getDisplayMedia) {
+      setError("Screen sharing needs a supported desktop browser over HTTPS.");
+      return;
+    }
+    setError("");
+    setScreenBusy(true);
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 15, max: 30 } },
+        audio: false,
+      });
+      const track = display.getVideoTracks()[0];
+      if (!track) {
+        display.getTracks().forEach((item) => item.stop());
+        throw new Error("The browser did not provide a screen-share video track.");
+      }
+      screenRef.current = display;
+      setScreenStream(display);
+      setScreenSharing(true);
+      track.onended = () => { void stopScreenShare(); };
+      await Promise.all([...peersRef.current.values()].map(async (peer) => {
+        const sender = getVideoSender(peer);
+        if (sender) await sender.replaceTrack(track);
+      }));
+      await updateCallPresenceScreen(true);
+    } catch (screenError: unknown) {
+      if (screenError instanceof DOMException && screenError.name === "NotAllowedError") return;
+      console.error("Could not start sharing the in-app call screen.", screenError);
+      if (mountedRef.current) setError(screenError instanceof Error ? screenError.message : "The screen could not be shared.");
+      await stopScreenShare();
+    } finally {
+      if (mountedRef.current) setScreenBusy(false);
+    }
+  }
+
   function startMinimizedDrag(event: ReactPointerEvent<HTMLElement>) {
     if (!minimized || (event.target instanceof Element && event.target.closest("button"))) return;
     const bounds = event.currentTarget.closest(".call-window")?.getBoundingClientRect();
@@ -701,9 +795,14 @@ function CallRoom({
   const remoteName = participants[0]?.name
     ?? details?.participants.find((participant) => participant.id !== user.id)?.name
     ?? "Calling";
+  const callTitle = participants.length > 1
+    ? participants.map((participant) => participant.name).join(" & ")
+    : remoteName;
   const callDuration = `${Math.floor(callSeconds / 60).toString().padStart(2, "0")}:${(callSeconds % 60).toString().padStart(2, "0")}`;
   const soloCall = participants.length <= 1;
   const localVideoTrack = localStream?.getVideoTracks().find((track) => track.readyState === "live" && track.enabled);
+  const canShareScreen = window.isSecureContext
+    && Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function");
 
   return (
     <div
@@ -713,7 +812,7 @@ function CallRoom({
       aria-modal={!minimized}
       aria-label="In-app call"
     >
-      <section className={`call-window${soloCall ? " call-window--solo" : ""}${minimized ? " call-window--minimized" : ""}`}>
+      <section className={`call-window${soloCall ? " call-window--solo" : " call-window--group"}${minimized ? " call-window--minimized" : ""}`}>
         <header
           className="call-window__header"
           onPointerDown={startMinimizedDrag}
@@ -722,7 +821,7 @@ function CallRoom({
           onPointerCancel={stopMinimizedDrag}
         >
           <div className="call-window__identity">
-            <strong>{remoteName}</strong>
+            <strong>{soloCall ? remoteName : callTitle}</strong>
             <small>{joining ? "Connecting…" : participants.length ? callDuration : details?.call.isCaller ? "Ringing…" : "Waiting for answer…"}</small>
             <span className="call-window__secure">🔒 End-to-end private</span>
           </div>
@@ -740,7 +839,6 @@ function CallRoom({
               title="Add people to call"
             >
               <UserPlus size={17} />
-              <span>Add people</span>
             </button>
           </div>
           <button
@@ -755,15 +853,16 @@ function CallRoom({
           >
             {minimized ? <Maximize2 size={18} /> : <Minimize2 size={18} />}
           </button>
+          {!soloCall && <span className="call-window__participant-count" aria-label={`${participants.length + 1} people in call`}><UsersRound size={16} />{participants.length + 1}</span>}
         </header>
         {error && <div className="alert alert--error" role="alert">{error}</div>}
         <div className={`call-window__tiles${soloCall ? " call-window__tiles--solo" : ""}`}>
           {participants.map((participant) => {
             const remote = remoteStreams[participant.userId];
-            const hasVideo = participant.videoEnabled !== false
+            const hasVideo = (participant.screenSharing || participant.videoEnabled !== false)
               && remote?.getVideoTracks().some((track) => track.readyState === "live" && !track.muted);
             return (
-              <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}${portraitVideos[participant.userId] ? " call-tile--portrait" : ""}`} key={participant.userId}>
+              <article className={`call-tile call-tile--remote${soloCall ? " call-tile--hero" : ""}${participant.screenSharing ? " call-tile--screen" : ""}${portraitVideos[participant.userId] ? " call-tile--portrait" : ""}`} key={participant.userId}>
                 {hasVideo
                   ? <CallVideo
                     stream={remote ?? null}
@@ -797,7 +896,7 @@ function CallRoom({
                     }
                   }}
                 />
-                <strong><span className="call-tile__audio-indicator" />{participant.name}</strong>
+                <strong><span className="call-tile__audio-indicator" />{participant.name}{participant.screenSharing ? " · Sharing screen" : ""}</strong>
               </article>
             );
           })}
@@ -812,9 +911,11 @@ function CallRoom({
               <small>{joining ? "Securing connection…" : "Ringing…"}</small>
             </div>
           )}
-          {((localVideoTrack && !cameraOff) || minimized || details?.call.mediaMode === "video") && (
-            <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}${portraitVideos[user.id] ? " call-tile--portrait" : ""}`}>
-              {localVideoTrack && !cameraOff
+          {((localVideoTrack && !cameraOff) || screenSharing || minimized || details?.call.mediaMode === "video") && (
+            <article className={`call-tile call-tile--local${soloCall ? " call-tile--selfie" : ""}${screenSharing ? " call-tile--screen" : ""}${portraitVideos[user.id] ? " call-tile--portrait" : ""}`}>
+              {screenSharing && screenStream
+                ? <CallVideo stream={screenStream} muted />
+                : localVideoTrack && !cameraOff
                 ? <CallVideo
                   stream={localStream}
                   muted
@@ -824,15 +925,19 @@ function CallRoom({
                   }))}
                 />
                 : <CallAvatar name={user.displayName?.trim() || "You"} avatarPath={user.avatarPath} large />}
-              <strong>You</strong>
+              <strong>{screenSharing ? "You · Sharing screen" : "You"}</strong>
             </article>
           )}
         </div>
-        <footer className="call-window__controls">
+        <footer className={`call-window__controls${soloCall ? " call-window__controls--solo" : " call-window__controls--group"}`}>
+          {soloCall && <button className={`call-control${speakerMuted ? "" : " call-control--active"}`} type="button" onClick={toggleSpeaker} aria-label={speakerMuted ? "Turn speaker on" : speakerPlaybackBlocked ? "Play call audio" : "Mute call audio"}><span><Headphones size={21} /></span><small>{speakerMuted ? "Speaker off" : speakerPlaybackBlocked ? "Tap to hear" : "Speaker"}</small></button>}
+          {!soloCall && <button className="call-control" type="button" onClick={() => { setInviteSearch(""); setSelectedInviteIds([]); setShowInvitePicker(true); }} aria-label="More call options"><span><MoreHorizontal size={21} /></span><small>More</small></button>}
+          <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy || screenSharing} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Video" : "Stop video"}</small></button>
+          {!soloCall && <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={toggleSpeaker} aria-label={speakerMuted ? "Turn speaker on" : speakerPlaybackBlocked ? "Play call audio" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : "Speaker"}</small></button>}
           <button className={`call-control${muted ? " call-control--active" : ""}`} type="button" onClick={() => void toggleMute()} aria-label={muted ? "Unmute microphone" : "Mute microphone"}><span>{muted ? <MicOff size={21} /> : <Mic size={21} />}</span><small>{muted ? "Unmute" : "Mute"}</small></button>
-          <button className={`call-control${speakerMuted ? " call-control--active" : ""}`} type="button" onClick={toggleSpeaker} aria-label={speakerMuted ? "Turn speaker on" : speakerPlaybackBlocked ? "Play call audio" : "Mute call audio"}><span>{speakerMuted ? <VolumeX size={21} /> : <Volume2 size={21} />}</span><small>{speakerMuted ? "Speaker off" : speakerPlaybackBlocked ? "Tap to hear" : "Speaker"}</small></button>
-          <button className={`call-control${cameraOff ? " call-control--active" : ""}`} type="button" onClick={() => void toggleCamera()} disabled={cameraBusy} aria-label={cameraOff ? "Start video" : "Stop video"}><span>{cameraOff ? <Video size={21} /> : <VideoOff size={21} />}</span><small>{cameraBusy ? "Updating…" : cameraOff ? "Start video" : "Stop video"}</small></button>
-          <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={isGroupCall ? "Leave group call" : "End call for everyone"}><span><PhoneOff size={21} /></span><small>{isGroupCall ? "Leave call" : "End call"}</small></button>
+          {soloCall && <button className="call-control" type="button" onClick={() => { setInviteSearch(""); setSelectedInviteIds([]); setShowInvitePicker(true); }} aria-label="Add people to call"><span><MoreHorizontal size={21} /></span><small>More</small></button>}
+          <button className={`call-control${screenSharing ? " call-control--active" : ""}`} type="button" onClick={() => void toggleScreenShare()} disabled={screenBusy || !canShareScreen} aria-label={screenSharing ? "Stop sharing screen" : "Share screen"} title={!canShareScreen ? "Screen sharing requires a supported desktop browser over HTTPS." : undefined}><span>{screenSharing ? <ScreenShareOff size={21} /> : <ScreenShare size={21} />}</span><small>{screenBusy ? "Updating…" : screenSharing ? "Stop sharing" : "Share"}</small></button>
+          <button className="call-control call-control--end" type="button" onClick={() => void finishCall()} aria-label={isGroupCall ? "Leave group call" : "End call for everyone"}><span><PhoneOff size={21} /></span><small>{isGroupCall ? "End" : "End"}</small></button>
         </footer>
       </section>
       {showInvitePicker && (
