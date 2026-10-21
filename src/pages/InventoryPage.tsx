@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, ImagePlus, Package, Pencil, Plus, Search } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Calculator, ImagePlus, Package, Pencil, Plus, Search } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import PageHeading from "../components/PageHeading";
 import { useToast } from "../components/ToastProvider";
+import QuickCalculator from "../components/QuickCalculator";
 import { apiRequest, getProductImageUrl } from "../lib/api";
 import type { InventoryProduct, VendorPurchase } from "../lib/api";
 import { supabase } from "../lib/supabase";
@@ -33,6 +34,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
   const [purchases, setPurchases] = useState<VendorPurchase[]>([]);
   const [purchaseProductId, setPurchaseProductId] = useState("");
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
+  const [showPurchaseCalculator, setShowPurchaseCalculator] = useState(false);
   const [paymentPurchase, setPaymentPurchase] = useState<VendorPurchase | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -248,6 +250,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
         : product));
       showToast(result.message, "success");
       setShowPurchaseForm(false);
+      setShowPurchaseCalculator(false);
       void refreshPurchases().catch((error: unknown) => {
         showToast(error instanceof Error ? `Purchase recorded, but history could not refresh: ${error.message}` : "Purchase recorded, but history could not refresh.", "error");
       });
@@ -288,7 +291,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
   return (
     <section className="module-page">
       <PageHeading title="Inventory" description="Stock levels, department selling prices and shift handovers." action={{ label: "Add Product", onClick: () => { setEditingProduct(null); setShowForm(true); } }} />
-      {canDispatchStock && <button className="button button--outline" type="button" onClick={() => { setPurchaseProductId(products[0]?.id ?? ""); setShowPurchaseForm(true); }} disabled={products.length === 0}><Plus size={15} /> Record vendor purchase</button>}
+      {canDispatchStock && <button className="button button--outline" type="button" onClick={() => { setPurchaseProductId(products[0]?.id ?? ""); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }} disabled={products.length === 0}><Plus size={15} /> Record vendor purchase</button>}
       <button className="icon-link" onClick={onMovements}><ArrowDownToLine size={15} /> View stock movement history</button>
       <label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products…" /></label>
       <div className="tab-strip">{["All", "In Stock", "Low Stock", "Out of Stock"].map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} onClick={() => setFilter(tab)}>{tab}</button>)}</div>
@@ -303,7 +306,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
               <ProductPhoto imagePath={product.imagePath} name={product.name} />
               <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Central: {product.centralStock} · In transit: {product.inTransitStock} · Department: {product.stock} · Total: {product.centralStock + product.inTransitStock + product.stock} {product.unit}</small></span>
               <span className={`status-pill${low ? " status-pill--warning" : ""}`}>{product.stock === 0 ? "Out of Stock" : low ? "Low Stock" : "In Stock"}</span>
-              {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Record a vendor stock purchase for ${product.name}`} title="Record a vendor purchase for this product" onClick={() => { setPurchaseProductId(product.id); setShowPurchaseForm(true); }}><Plus size={16} /></button>}
+              {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Record a vendor stock purchase for ${product.name}`} title="Record a vendor purchase for this product" onClick={() => { setPurchaseProductId(product.id); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }}><Plus size={16} /></button>}
               {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Send stock for ${product.name}`} title={department?.headUserId ? "Reserve central stock and send it to the department head" : "Assign a department and active head before sending stock"} disabled={!department?.headUserId || product.centralStock < 1} onClick={() => { setDispatchProduct(product); setDispatchQuantity("1"); }}><ArrowUpFromLine size={15} /></button>}
               <button className="icon-link inventory-move" aria-label={`Edit ${product.name}`} onClick={() => { setEditingProduct(product); setImageFile(null); setImagePreview(getProductImageUrl(product.imagePath)); setShowForm(true); }}><Pencil size={15} /></button>
               <button className="icon-link inventory-move" aria-label={`Record a movement for ${product.name}`} onClick={onMovements}><ArrowUpFromLine size={16} /></button>
@@ -366,9 +369,9 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
           </form>
         </section>
       </div>}
-      {showPurchaseForm && <div className="preview-modal">
+      {showPurchaseForm && <div className={`preview-modal${showPurchaseCalculator ? " preview-modal--calculator" : ""}`}>
         <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="vendor-purchase-title">
-          <div className="preview-modal__heading"><h2 id="vendor-purchase-title">Record vendor purchase</h2><button className="preview-modal__close" type="button" aria-label="Close" disabled={savingPurchase} onClick={() => setShowPurchaseForm(false)}>×</button></div>
+          <div className="preview-modal__heading"><h2 id="vendor-purchase-title">Record vendor purchase</h2><div className="preview-modal__heading-actions"><button className={`button button--outline calculator-toggle${showPurchaseCalculator ? " calculator-toggle--active" : ""}`} type="button" aria-expanded={showPurchaseCalculator} aria-controls="purchase-calculator" onClick={() => setShowPurchaseCalculator((current) => !current)}><Calculator size={15} /> Calculator</button><button className="preview-modal__close" type="button" aria-label="Close" disabled={savingPurchase} onClick={() => { setShowPurchaseForm(false); setShowPurchaseCalculator(false); }}>×</button></div></div>
           <form className="form-card" onSubmit={(event) => void recordPurchase(event)}>
             <label>Product<select name="productId" value={purchaseProductId} onChange={(event) => setPurchaseProductId(event.target.value)} required><option value="" disabled>Choose product</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name} ({product.unit})</option>)}</select></label>
             <label>Vendor / supplier<input name="vendorName" required minLength={2} maxLength={160} placeholder="Vendor name" /></label>
@@ -385,6 +388,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
             <div className="form-actions"><button className="button button--outline" type="button" disabled={savingPurchase} onClick={() => setShowPurchaseForm(false)}>Cancel</button><button className="button button--primary" type="submit" disabled={savingPurchase}>{savingPurchase ? "Recording…" : "Record purchase and receive stock"}</button></div>
           </form>
         </section>
+        {showPurchaseCalculator && <div id="purchase-calculator"><QuickCalculator onClose={() => setShowPurchaseCalculator(false)} /></div>}
       </div>}
       {paymentPurchase && <div className="preview-modal">
         <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="vendor-payment-title">

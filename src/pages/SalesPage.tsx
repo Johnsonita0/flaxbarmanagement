@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IScannerControls } from "@zxing/browser";
-import { Barcode, Camera, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { Barcode, Calculator, Camera, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import { apiRequest, getProductImageUrl } from "../lib/api";
+import QuickCalculator from "../components/QuickCalculator";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
 import "./../css/OperationsPages.css";
@@ -56,6 +57,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [category, setCategory] = useState("All");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [showSaleCalculator, setShowSaleCalculator] = useState(false);
   const [additionalProductId, setAdditionalProductId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -138,6 +140,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
 
   function openSale(product: SalesProduct) {
     setSelectedProductId(product.id);
+    setShowSaleCalculator(false);
     setAdditionalProductId("");
     setPaymentMethod("cash");
     setQuantities({ [product.id]: 1 });
@@ -173,6 +176,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   function closeSale() {
     if (saving) return;
     setSelectedProductId(null);
+    setShowSaleCalculator(false);
     setQuantities({});
     setAdditionalProductId("");
   }
@@ -208,6 +212,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
       });
       showToast(result.message, "success");
       setSelectedProductId(null);
+      setShowSaleCalculator(false);
       setQuantities({});
       await loadSales();
     } catch (reason: unknown) {
@@ -282,11 +287,12 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
         {loading ? <p className="empty-state">Loading sales…</p> : sales.length === 0 ? <p className="empty-state">No sales recorded yet.</p> : sales.map((sale) => <div className="record-row" key={sale.id}><span className="product-token"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{sale.departmentName} · {sale.sellerName}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.createdAt))} · {sale.paymentMethod} · {sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</small></span><strong className="record-row__meta">{money(sale.total)}</strong></div>)}
       </div>
 
-      {selectedProductId && <div className="sale-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeSale(); }}>
+      {selectedProductId && <div className={`sale-modal-backdrop${showSaleCalculator ? " sale-modal-backdrop--calculator" : ""}`} onMouseDown={(event) => { if (event.target === event.currentTarget) closeSale(); }}>
+        <div className={`sale-modal-layout${showSaleCalculator ? " sale-modal-layout--calculator" : ""}`}>
         <section className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-modal-title">
           <header className="sale-modal__header">
             <div><span className="eyebrow">NEW TRANSACTION</span><h2 id="sale-modal-title">Complete sale</h2><p>Check the items and payment before confirming.</p></div>
-            <button className="icon-button" type="button" aria-label="Close sale" onClick={closeSale} disabled={saving}><X size={19} /></button>
+            <div className="sale-modal__header-actions"><button className={`button button--outline calculator-toggle${showSaleCalculator ? " calculator-toggle--active" : ""}`} type="button" aria-expanded={showSaleCalculator} aria-controls="sale-calculator" onClick={() => setShowSaleCalculator((current) => !current)}><Calculator size={15} /> Calculator</button><button className="icon-button" type="button" aria-label="Close sale" onClick={closeSale} disabled={saving}><X size={19} /></button></div>
           </header>
           <div className="sale-modal__items">
             {selectedProducts.map((product) => {
@@ -302,6 +308,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
           <div className="sale-modal__total"><span>Total to collect</span><strong>{money(total)}</strong></div>
           <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Cancel</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
         </section>
+        {showSaleCalculator && <div id="sale-calculator"><QuickCalculator onClose={() => setShowSaleCalculator(false)} /></div>}
+        </div>
       </div>}
     </section>
   );

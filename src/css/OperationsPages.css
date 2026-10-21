@@ -339,12 +339,18 @@
 .sales-empty span { font-size: 10px; }
 .sales-history { margin-top: 17px; }
 .sale-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow-y: auto; padding: 20px; background: rgba(16, 31, 49, .58); backdrop-filter: blur(3px); }
+.sale-modal-layout { width: min(100%, 520px); display: flex; align-items: center; gap: 12px; }
+.sale-modal-layout--calculator { width: min(100%, 800px); }
 .sale-modal { width: min(100%, 520px); max-height: min(90vh, 760px); overflow-y: auto; padding: 23px; border: 1px solid rgba(255, 255, 255, .6); border-radius: 16px; background: white; box-shadow: 0 25px 80px rgba(13, 32, 51, .28); }
+.sale-modal-layout--calculator .sale-modal { flex: 1 1 520px; min-width: 0; }
 .sale-modal__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 17px; border-bottom: 1px solid #edf1f5; }
 .sale-modal__header .eyebrow { margin: 0; color: #6c8cac; font-size: 9px; font-weight: 700; letter-spacing: .13em; }
 .sale-modal__header h2 { margin: 5px 0; color: #223b55; font: 700 20px "Manrope", sans-serif; }
 .sale-modal__header p { margin: 0; color: #8491a0; font-size: 10px; }
 .sale-modal__header .icon-button { flex: 0 0 auto; border: 1px solid #e7edf2; }
+.sale-modal__header-actions, .preview-modal__heading-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 7px; }
+.calculator-toggle { min-height: 33px; gap: 6px; padding-inline: 9px; font-size: 10px; }
+.calculator-toggle--active { border-color: #8bb5d4; color: #1e5c89; background: #f1f8fd; }
 .sale-modal__items { display: grid; gap: 8px; padding: 16px 0; }
 .sale-modal-item { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px; border: 1px solid #edf1f5; border-radius: 10px; background: #fbfcfd; }
 .sale-modal-item__image { width: 43px; height: 43px; flex: 0 0 auto; border-radius: 8px; object-fit: cover; background: #edf2f6; }
@@ -366,6 +372,22 @@
 .sale-modal__total strong { color: #1e3d5b; font: 700 21px "Manrope", sans-serif; }
 .sale-modal__actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 11px; }
 .sale-modal__actions .button { min-height: 40px; }
+.quick-calculator { width: 270px; flex: 0 0 270px; padding: 16px; border: 1px solid #e5ebf0; border-radius: 13px; background: #fff; box-shadow: 0 20px 60px rgba(5, 25, 47, .25); }
+.quick-calculator__header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.quick-calculator__header span { color: #8395a7; font-size: 8px; font-weight: 700; letter-spacing: .12em; }
+.quick-calculator__header h3 { margin: 3px 0 0; color: #263c54; font: 700 16px "Manrope", sans-serif; }
+.quick-calculator__display { display: flex; min-height: 56px; align-items: center; justify-content: flex-end; overflow: hidden; margin-bottom: 11px; padding: 8px 10px; border: 1px solid #e5ebf0; border-radius: 8px; color: #213d59; background: #f7f9fb; font: 600 23px "Manrope", sans-serif; white-space: nowrap; }
+.quick-calculator__keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.quick-calculator__keys button { min-height: 43px; border: 1px solid #e7edf2; border-radius: 8px; color: #42586e; background: #f8fafb; font: 600 14px "Manrope", sans-serif; }
+.quick-calculator__keys button:hover { background: #edf4f8; }
+.quick-calculator__keys .quick-calculator__operator { color: #226394; background: #edf6fc; }
+.quick-calculator__keys .quick-calculator__equals { border-color: #236d9f; color: white; background: #236d9f; }
+.quick-calculator__keys .quick-calculator__zero { grid-column: span 2; }
+.quick-calculator__note { margin: 12px 0 0; color: #8693a1; font-size: 9px; line-height: 1.5; }
+.preview-modal--calculator { display: flex; align-items: center; justify-content: center; gap: 12px; overflow-y: auto; }
+.preview-modal--calculator .preview-modal__body { flex: 0 1 420px; }
+#purchase-calculator { flex: 0 0 auto; }
+#purchase-calculator .quick-calculator, #sale-calculator .quick-calculator { max-height: min(88vh, 720px); overflow-y: auto; }
 .notification-row--unread { background: #f5f9fd; }
 .notification-row--system .task-icon { color: #9a5a19; background: #fff4e7; }
 .notification-detail-panel { margin: 0 12px 12px 52px; padding: 13px; border: 1px solid #e8edf1; border-radius: 9px; background: #fbfcfd; }
@@ -432,6 +454,15 @@
   .sales-product-card__details { align-items: flex-start; flex-direction: column; gap: 4px; }
   .sales-product-card__details span { text-align: left; }
   .sale-modal { padding: 17px; }
+  .sale-modal-backdrop--calculator { place-items: start center; }
+  .sale-modal-layout { flex-direction: column; align-items: stretch; margin: auto 0; }
+  .sale-modal-layout--calculator { width: min(100%, 520px); }
+  .sale-modal-layout--calculator .sale-modal { flex: 0 1 auto; width: 100%; }
+  .sale-modal-layout .quick-calculator { width: 100%; flex: 0 0 auto; }
+  .preview-modal--calculator { flex-direction: column; align-items: stretch; justify-content: flex-start; }
+  .preview-modal--calculator .preview-modal__body { width: min(100%, 420px); flex: 0 1 auto; }
+  .preview-modal--calculator > #purchase-calculator { width: min(100%, 420px); align-self: center; }
+  .preview-modal--calculator .quick-calculator { width: 100%; }
   .sale-modal-item { gap: 7px; padding: 8px 6px; }
   .sale-modal-item__image { width: 36px; height: 36px; }
   .sale-modal-item .quantity-control { gap: 3px; }
