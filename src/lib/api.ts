@@ -82,12 +82,32 @@ export interface InventoryProduct {
   reorder: number;
   centralStock: number;
   inTransitStock: number;
+  averageUnitCost?: number;
   imagePath: string | null;
   departmentId: string | null;
   departmentName: string | null;
   price: number;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface VendorPurchase {
+  id: string;
+  productId: string;
+  productName: string;
+  unit: string;
+  vendorName: string;
+  reference: string | null;
+  packageQuantity: number;
+  unitsPerPackage: number;
+  totalUnits: number;
+  ratePerPackage: number;
+  invoiceTotal: number;
+  amountPaid: number;
+  balance: number;
+  createdByName: string;
+  createdAt: string;
+  payments: { id: string; amount: number; method: string; paidByName: string; paidAt: string }[];
 }
 
 export function getProductImageUrl(imagePath: string | null): string | null {

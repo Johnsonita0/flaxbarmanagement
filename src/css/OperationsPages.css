@@ -383,15 +383,36 @@
 .notification-push-setting small { margin-top: 4px; color: #8190a0; font-size: 9px; line-height: 1.5; }
 .notification-push-setting .button { min-height: 34px; flex: 0 0 auto; font-size: 9px; }
 .notification-read-button { margin-left: 0; }
-.sales-report-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.sales-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
 .sales-report-metric { padding: 16px; border: 1px solid #e7edf3; border-radius: 11px; background: linear-gradient(145deg, #fff, #f8fbfd); }
 .sales-report-metric span, .sales-report-metric strong { display: block; }
 .sales-report-metric span { margin-bottom: 8px; color: #8391a0; font-size: 10px; }
-.sales-report-metric strong { color: #213f5c; font: 700 21px "Manrope", sans-serif; }
+.sales-report-metric strong { color: #213f5c; font: 700 18px "Manrope", sans-serif; overflow-wrap: anywhere; }
 .sales-report-chart { min-height: 170px; display: flex; align-items: flex-end; gap: 7px; overflow-x: auto; padding: 18px 4px 3px; border-bottom: 1px solid #e9edf2; }
 .sales-report-bar { min-width: 34px; flex: 1; display: grid; justify-items: center; gap: 7px; }
-.sales-report-bar span { width: min(25px, 75%); min-height: 4px; border-radius: 5px 5px 0 0; background: linear-gradient(180deg, #72b5e6, #216da9); }
+.sales-report-bar__group { height: 132px; display: flex; align-items: flex-end; gap: 2px; }
+.sales-report-bar__group span { width: 8px; min-height: 3px; border-radius: 4px 4px 0 0; }
+.sales-report-bar__revenue, .sales-report-legend__revenue { background: #347eae; }
+.sales-report-bar__expenditure, .sales-report-legend__expenditure { background: #d99c40; }
+.sales-report-bar__profit, .sales-report-legend__profit { background: #43a277; }
 .sales-report-bar small { color: #8291a1; font-size: 8px; white-space: nowrap; }
+.sales-report-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; color: #687c90; font-size: 9px; }
+.sales-report-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.sales-report-legend span::before { width: 8px; height: 8px; border-radius: 2px; content: ""; }
+.sales-report-legend__revenue::before { background: #347eae; }
+.sales-report-legend__expenditure::before { background: #d99c40; }
+.sales-report-legend__profit::before { background: #43a277; }
+.sales-report-projection { margin-top: 22px; padding-top: 8px; border-top: 1px solid #e9edf2; }
+.sales-projection-chart { display: grid; gap: 10px; margin: 16px 0; }
+.sales-projection-chart__row { display: grid; grid-template-columns: 105px minmax(40px, 1fr) minmax(76px, auto); align-items: center; gap: 10px; color: #687c90; font-size: 9px; }
+.sales-projection-chart__row > div { height: 9px; overflow: hidden; border-radius: 6px; background: #edf1f4; }
+.sales-projection-chart__row i { display: block; height: 100%; min-width: 2px; border-radius: inherit; }
+.sales-projection-chart__row strong { color: #40566c; text-align: right; font-size: 10px; }
+.sales-projection-chart__revenue { background: #347eae; }
+.sales-projection-chart__expenditure { background: #d99c40; }
+.sales-projection-chart__profit { background: #43a277; }
+.sales-projection-chart__cash { background: #8667b5; }
+.report-range-shortcuts { flex-wrap: wrap; }
 @media (max-width: 560px) {
   .notification-controls { align-items: stretch; flex-direction: column; }
   .notification-actions { justify-content: space-between; }
@@ -401,6 +422,11 @@
   .sales-catalog__heading h2 { font-size: 17px; }
   .sales-catalog__heading .button { min-height: 34px; padding-inline: 8px; white-space: nowrap; }
   .sales-product-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .sales-report-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .sales-report-metric { padding: 12px; }
+  .sales-report-metric strong { font-size: 15px; }
+  .sales-report-bar { min-width: 48px; }
+  .sales-projection-chart__row { grid-template-columns: 84px minmax(32px, 1fr) minmax(70px, auto); gap: 7px; }
   .sales-product-card__image { height: 100px; }
   .sales-product-card__body { padding: 9px; }
   .sales-product-card__details { align-items: flex-start; flex-direction: column; gap: 4px; }
