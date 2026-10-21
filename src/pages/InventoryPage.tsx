@@ -374,7 +374,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
             <label>Invoice / reference number <span className="muted-copy">Optional</span><input name="reference" maxLength={100} /></label>
             <div className="inventory-form-grid">
               <label>Boxes bought<input name="packageQuantity" type="number" min="1" max="1000000" step="1" defaultValue="1" required /></label>
-              <label>Selling units per box<input name="unitsPerPackage" type="number" min="1" max="1000000" step="1" defaultValue="24" required /></label>
+              <label>Selling units per box<input name="unitsPerPackage" type="number" min="1" max="1000000" step="1" placeholder="Enter box size" required /></label>
             </div>
             <p className="muted-copy">For example, 5 boxes × 24 bottles adds 120 bottles to central stock.</p>
             <label>Rate per box (₦)<input name="ratePerPackage" type="number" min="0" step="0.01" required /></label>
