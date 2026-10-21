@@ -474,6 +474,8 @@ export default function AppRouter() {
     return (
       <LockPinGate
         mode="setup"
+        user={user}
+        onSignOut={() => void signOut()}
         onComplete={() => setUser({ ...user, hasLockPin: true })}
       />
     );
@@ -483,6 +485,8 @@ export default function AppRouter() {
     return (
       <LockPinGate
         mode="unlock"
+        user={user}
+        onSignOut={() => void signOut()}
         onComplete={() => setWorkspaceLocked(false)}
         onResetRequired={() => {
           setWorkspaceLocked(false);
