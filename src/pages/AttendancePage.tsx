@@ -62,6 +62,9 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
   const [loadError, setLoadError] = useState("");
   const scannerVideoRef = useRef<HTMLVideoElement>(null);
   const scannerControlsRef = useRef<IScannerControls | null>(null);
+  const locationWatchRef = useRef<number | null>(null);
+  const locationTimeoutRef = useRef<number | null>(null);
+  const bestLocationRef = useRef<{ latitude: number; longitude: number; accuracyMeters: number } | null>(null);
 
   const loadAttendance = useCallback(async () => {
     setLoading(true);
@@ -84,27 +87,46 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
     void loadAttendance();
   }, [loadAttendance]);
 
-  useEffect(() => () => scannerControlsRef.current?.stop(), []);
+  useEffect(() => () => {
+    scannerControlsRef.current?.stop();
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+    if (locationTimeoutRef.current !== null) window.clearTimeout(locationTimeoutRef.current);
+  }, []);
 
   function locate() {
     if (!navigator.geolocation) {
       setGeoState("error");
       return;
     }
+    if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+    if (locationTimeoutRef.current !== null) window.clearTimeout(locationTimeoutRef.current);
+    bestLocationRef.current = null;
     setGeoState("loading");
     setCoordinates(null);
-    navigator.geolocation.getCurrentPosition(
+    const finishLocationWatch = () => {
+      if (locationWatchRef.current !== null) navigator.geolocation.clearWatch(locationWatchRef.current);
+      if (locationTimeoutRef.current !== null) window.clearTimeout(locationTimeoutRef.current);
+      locationWatchRef.current = null;
+      locationTimeoutRef.current = null;
+      setGeoState(bestLocationRef.current ? "found" : "error");
+    };
+    locationWatchRef.current = navigator.geolocation.watchPosition(
       ({ coords }) => {
-        setCoordinates({
+        const nextLocation = {
           latitude: coords.latitude,
           longitude: coords.longitude,
           accuracyMeters: coords.accuracy,
-        });
-        setGeoState("found");
+        };
+        if (!bestLocationRef.current || nextLocation.accuracyMeters < bestLocationRef.current.accuracyMeters) {
+          bestLocationRef.current = nextLocation;
+          setCoordinates(nextLocation);
+        }
+        if (nextLocation.accuracyMeters <= (config?.radiusMeters ?? 25)) finishLocationWatch();
       },
-      () => setGeoState("error"),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 },
+      () => finishLocationWatch(),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 },
     );
+    locationTimeoutRef.current = window.setTimeout(finishLocationWatch, 30000);
   }
 
   async function startQrScan() {
@@ -144,10 +166,15 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
 
   const currentDate = config ? businessDate(config.timezone) : "";
   const todaysRecord = records.find((record) => record.date === currentDate);
+  const gpsAccuracyReady = Boolean(coordinates && coordinates.accuracyMeters <= (config?.radiusMeters ?? 25));
 
   async function clock(action: "clock-in" | "clock-out") {
-    if (!coordinates) {
-      showToast("Check your location before recording attendance.", "error");
+    if (!coordinates || !gpsAccuracyReady) {
+      showToast("Check your location again while you are at the business.", "error");
+      return;
+    }
+    if (!qrToken) {
+      showToast("Scan the current on-site attendance QR code before recording attendance.", "error");
       return;
     }
     setSaving(true);
@@ -177,9 +204,9 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
             <span className="map-preview__pin"><MapPin size={23} fill="currentColor" /></span>
             <span className="map-preview__ring" />
           </div>
-          <div className="location-status"><MapPin size={17} /><div><strong>{config?.configured ? "Business attendance area is ready" : "Business location not configured"}</strong><small>{coordinates ? `GPS accuracy: about ${Math.ceil(coordinates.accuracyMeters)} m. Your location must be confirmed within the ${config?.radiusMeters ?? 10} m area.` : config?.configured ? `Attendance is restricted to a 10-metre area around the approved location.` : "Ask the super admin to set the business location before clock-in."}</small></div></div>
+          <div className="location-status"><MapPin size={17} /><div><strong>{config?.configured ? "Business attendance area is ready" : "Business location not configured"}</strong><small>{coordinates ? `Your location must be verified within the ${config?.radiusMeters ?? 25} m attendance area.` : config?.configured ? "Attendance is restricted to a 25-metre area around the approved location." : "Ask the super admin to set the business location before clock-in."}</small></div></div>
           {geoState === "error" && <p className="inline-error" role="alert">Location could not be read. Allow location access and try again.</p>}
-          <button className="button button--outline location-button" onClick={locate} disabled={geoState === "loading" || loading}>{geoState === "loading" ? "Checking location…" : "Check my location"}</button>
+          <button className="button button--outline location-button" onClick={locate} disabled={geoState === "loading" || loading}>{geoState === "loading" ? coordinates ? `Improving GPS accuracy… ${Math.ceil(coordinates.accuracyMeters)} m` : "Finding precise location…" : "Check my location"}</button>
           <div className="attendance-qr-check">
             <div className="attendance-qr-check__heading"><QrCode size={18} /><div><strong>Scan the on-site check-in code</strong><small>The code must be displayed inside the business and refreshes every 30 seconds.</small></div></div>
             <video className="attendance-qr-check__video" ref={scannerVideoRef} hidden={!scanningQr} muted playsInline aria-label="Camera scanning the on-site attendance QR code" />
@@ -192,11 +219,11 @@ export default function AttendancePage({ canClockIn = true }: { canClockIn?: boo
           {todaysRecord?.clockOut ? (
             <button className="button button--primary checkin-button" disabled><CheckCircle2 size={16} /> Shift complete</button>
           ) : todaysRecord ? (
-            <button className="button button--primary checkin-button" onClick={() => void clock("clock-out")} disabled={!config?.configured || !coordinates || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock Out"}</button>
+            <button className="button button--primary checkin-button" onClick={() => void clock("clock-out")} disabled={!config?.configured || !gpsAccuracyReady || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock Out"}</button>
           ) : (
-            <button className="button button--primary checkin-button" onClick={() => void clock("clock-in")} disabled={loading || !config?.configured || !coordinates || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock In"}</button>
+            <button className="button button--primary checkin-button" onClick={() => void clock("clock-in")} disabled={loading || !config?.configured || !gpsAccuracyReady || !qrToken || saving}><Clock3 size={16} /> {saving ? "Recording…" : "Clock In"}</button>
           )}
-          <div className="secure-note"><CheckCircle2 size={15} /> Attendance is recorded only when your precise GPS position is inside the 10-metre geofence and the rotating on-site QR code is valid.</div>
+          <div className="secure-note"><CheckCircle2 size={15} /> Attendance is recorded only when your location is verified inside the 25-metre geofence and the rotating on-site QR code is valid.</div>
         </div>
       ) : (
         <div className="surface-card">

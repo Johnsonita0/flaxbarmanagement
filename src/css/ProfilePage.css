@@ -8,8 +8,10 @@
 .profile-crop-dialog__header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .profile-crop-dialog__header h2 { margin: 0; color: #293f58; font: 700 17px "Manrope", sans-serif; }
 .profile-crop-dialog__header p { margin: 5px 0 0; color: #7d8b9a; font-size: 12px; }
-.profile-crop-window { width: min(100%, 300px); aspect-ratio: 1; justify-self: center; overflow: hidden; border-radius: 12px; background: #edf2f7; }
-.profile-crop-window img { width: 100%; height: 100%; object-fit: cover; }
+.profile-crop-window { width: min(100%, 300px); aspect-ratio: 1; justify-self: center; overflow: hidden; border-radius: 12px; background: #edf2f7; cursor: grab; touch-action: none; user-select: none; }
+.profile-crop-window:active { cursor: grabbing; }
+.profile-crop-window img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+.profile-crop-hint { margin: -8px 0 0; color: #7d8b9a; font-size: 11px; text-align: center; }
 .profile-crop-zoom { display: grid; gap: 8px; color: #52677d; font-size: 12px; }
 .profile-crop-zoom input { width: 100%; accent-color: #1767aa; }
 @media (max-width: 480px) {

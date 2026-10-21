@@ -51,7 +51,7 @@ export default function SettingsPage({
 }) {
   const [section, setSection] = useState<SettingsSection>("menu");
   const [coordinates, setCoordinates] = useState("");
-  const [radius, setRadius] = useState("10");
+  const [radius, setRadius] = useState("25");
   const [locationTimezone, setLocationTimezone] = useState("Africa/Lagos");
   const [attendanceQrImage, setAttendanceQrImage] = useState("");
   const [attendanceQrExpiresAt, setAttendanceQrExpiresAt] = useState<number | null>(null);
@@ -80,7 +80,7 @@ export default function SettingsPage({
           } else {
             setCoordinates("");
           }
-          setRadius("10");
+          setRadius("25");
           setLocationTimezone(value.timezone);
         })
         .catch((reason: unknown) => {
@@ -312,10 +312,10 @@ export default function SettingsPage({
           <div className="map-preview map-preview--settings"><div className="map-preview__grid" /><span className="map-preview__pin"><MapPin size={23} fill="currentColor" /></span><span className="map-preview__ring" /></div>
           <div className="surface-card form-card">
             <h2>Business Location / Geofence</h2>
-            <p className="form-help">{canManage ? "Set the building's approved GPS pin. Check-in is restricted to a 10-metre area, requires precise GPS, and requires a rotating QR code displayed on-site." : "Attendance requires precise GPS within 10 metres of the approved pin and the rotating on-site QR code."}</p>
+            <p className="form-help">{canManage ? "Set the building's approved GPS pin. Check-in is restricted to a 25-metre area and requires a rotating QR code displayed on-site." : "Attendance requires your location to be verified within 25 metres of the approved pin and the rotating on-site QR code."}</p>
             {canManage && <button className="button button--outline" onClick={detectLocation}><MapPin size={16} /> Use this device's location</button>}
             <label>Latitude, longitude<input value={coordinates} onChange={(event) => setCoordinates(event.target.value)} placeholder="e.g. 6.000000, 3.000000" readOnly={!canManage} /></label>
-            <label>Geofence radius (metres)<input type="number" min="10" max="10" value={radius} readOnly /></label>
+            <label>Geofence radius (metres)<input type="number" min="25" max="25" value={radius} readOnly /></label>
             <label>Business timezone<input value={locationTimezone} onChange={(event) => setLocationTimezone(event.target.value)} list="business-timezones" readOnly={!canManage} /><datalist id="business-timezones"><option value="Africa/Lagos" /><option value="Africa/Accra" /><option value="Europe/London" /><option value="UTC" /></datalist></label>
             {canManage && <button className="button button--primary" onClick={() => void saveLocation()} disabled={!coordinates || saving}><Check size={15} />{saving ? "Saving…" : "Save business location"}</button>}
           </div>

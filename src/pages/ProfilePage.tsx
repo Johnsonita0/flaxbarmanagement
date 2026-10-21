@@ -27,11 +27,30 @@ function readImageFile(file: File): Promise<string> {
   });
 }
 
-function makeSquareCrop(image: HTMLImageElement, zoom: number): Promise<Blob> {
+interface CropOffset {
+  x: number;
+  y: number;
+}
+
+function clampCropOffset(image: HTMLImageElement, viewportSize: number, zoom: number, offset: CropOffset): CropOffset {
+  if (!image.naturalWidth || !image.naturalHeight || !viewportSize) return { x: 0, y: 0 };
+  const scale = viewportSize / Math.min(image.naturalWidth, image.naturalHeight);
+  const maxX = Math.max(0, (image.naturalWidth * scale * zoom - viewportSize) / 2);
+  const maxY = Math.max(0, (image.naturalHeight * scale * zoom - viewportSize) / 2);
+  return {
+    x: Math.min(maxX, Math.max(-maxX, offset.x)),
+    y: Math.min(maxY, Math.max(-maxY, offset.y)),
+  };
+}
+
+function makeSquareCrop(image: HTMLImageElement, zoom: number, offset: CropOffset, viewportSize: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const size = Math.min(image.naturalWidth, image.naturalHeight) / zoom;
-    const left = (image.naturalWidth - size) / 2;
-    const top = (image.naturalHeight - size) / 2;
+    const previewScale = viewportSize / Math.min(image.naturalWidth, image.naturalHeight);
+    const centerX = image.naturalWidth / 2 - offset.x / (previewScale * zoom);
+    const centerY = image.naturalHeight / 2 - offset.y / (previewScale * zoom);
+    const left = Math.min(image.naturalWidth - size, Math.max(0, centerX - size / 2));
+    const top = Math.min(image.naturalHeight - size, Math.max(0, centerY - size / 2));
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 512;
@@ -67,8 +86,11 @@ export default function ProfilePage({
   const [displayName, setDisplayName] = useState(user.displayName ?? "");
   const [cropSource, setCropSource] = useState<string | null>(null);
   const [cropZoom, setCropZoom] = useState(1);
+  const [cropOffset, setCropOffset] = useState<CropOffset>({ x: 0, y: 0 });
   const fileInput = useRef<HTMLInputElement>(null);
+  const cropViewport = useRef<HTMLDivElement>(null);
   const cropImage = useRef<HTMLImageElement>(null);
+  const cropDrag = useRef<{ pointerId: number; clientX: number; clientY: number; offset: CropOffset } | null>(null);
   const name = user.displayName?.trim() || user.email?.split("@")[0] || "Flex Bar user";
   const photoUrl = getProfilePhotoUrl(user.avatarPath);
 
@@ -123,6 +145,7 @@ export default function ProfilePage({
     try {
       setCropSource(await readImageFile(file));
       setCropZoom(1);
+      setCropOffset({ x: 0, y: 0 });
     } catch {
       showToast("We couldn't open that image. Please choose another file.", "error");
     }
@@ -135,7 +158,12 @@ export default function ProfilePage({
     }
     setUploadBusy(true);
     try {
-      const croppedPhoto = await makeSquareCrop(cropImage.current, cropZoom);
+      const croppedPhoto = await makeSquareCrop(
+        cropImage.current,
+        cropZoom,
+        cropOffset,
+        cropViewport.current?.clientWidth ?? 300,
+      );
       const path = `${user.id}/${crypto.randomUUID()}.jpg`;
       const { error: uploadError } = await supabase.storage
         .from("profile-photos")
@@ -198,8 +226,57 @@ export default function ProfilePage({
         <div className="profile-crop-backdrop">
           <section className="profile-crop-dialog" role="dialog" aria-modal="true" aria-labelledby="profile-crop-title">
             <div className="profile-crop-dialog__header"><div><h2 id="profile-crop-title">Crop profile photo</h2><p>Adjust the square crop so your face is centered.</p></div><button className="icon-button" onClick={() => setCropSource(null)} aria-label="Close photo crop"><X size={19} /></button></div>
-            <div className="profile-crop-window"><img ref={cropImage} src={cropSource} alt="Photo crop preview" style={{ transform: `scale(${cropZoom})` }} /></div>
-            <label className="profile-crop-zoom">Zoom<input type="range" min="1" max="3" step="0.05" value={cropZoom} onChange={(event) => setCropZoom(Number(event.target.value))} /></label>
+            <div
+              ref={cropViewport}
+              className="profile-crop-window"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                cropDrag.current = {
+                  pointerId: event.pointerId,
+                  clientX: event.clientX,
+                  clientY: event.clientY,
+                  offset: cropOffset,
+                };
+              }}
+              onPointerMove={(event) => {
+                const drag = cropDrag.current;
+                if (!drag || drag.pointerId !== event.pointerId) return;
+                const nextOffset = clampCropOffset(
+                  cropImage.current!,
+                  event.currentTarget.clientWidth,
+                  cropZoom,
+                  {
+                    x: drag.offset.x + event.clientX - drag.clientX,
+                    y: drag.offset.y + event.clientY - drag.clientY,
+                  },
+                );
+                setCropOffset(nextOffset);
+              }}
+              onPointerUp={(event) => {
+                if (cropDrag.current?.pointerId !== event.pointerId) return;
+                cropDrag.current = null;
+                event.currentTarget.releasePointerCapture(event.pointerId);
+              }}
+              onPointerCancel={() => { cropDrag.current = null; }}
+            >
+              <img
+                ref={cropImage}
+                src={cropSource}
+                alt="Photo crop preview. Drag to position your face."
+                draggable={false}
+                onLoad={() => setCropOffset((offset) => clampCropOffset(cropImage.current!, cropViewport.current?.clientWidth ?? 300, cropZoom, offset))}
+                style={{ transform: `scale(${cropZoom}) translate(${cropOffset.x / cropZoom}px, ${cropOffset.y / cropZoom}px)` }}
+              />
+            </div>
+            <p className="profile-crop-hint">Drag the photo to center your face, then adjust the zoom.</p>
+            <label className="profile-crop-zoom">Zoom<input type="range" min="1" max="3" step="0.05" value={cropZoom} onChange={(event) => {
+              const zoom = Number(event.target.value);
+              setCropZoom(zoom);
+              if (cropImage.current && cropViewport.current) {
+                setCropOffset((offset) => clampCropOffset(cropImage.current!, cropViewport.current!.clientWidth, zoom, offset));
+              }
+            }} /></label>
             <div className="toolbar-row"><button className="button button--outline" onClick={() => setCropSource(null)} disabled={uploadBusy}>Cancel</button><button className="button button--primary" onClick={() => void uploadPhoto()} disabled={uploadBusy}><Camera size={15} />{uploadBusy ? "Saving photo…" : "Use cropped photo"}</button></div>
           </section>
         </div>
