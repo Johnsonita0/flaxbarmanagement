@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import type { CurrentUser } from "../lib/api";
-import { apiRequest, claimDeviceSession, fetchCurrentUser, releaseDeviceSession } from "../lib/api";
+import { apiRequest, claimDeviceSession, fetchCurrentUser, hasCachedDeviceSession, releaseDeviceSession } from "../lib/api";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { useToast } from "../components/ToastProvider";
 import DashboardPage from "./DashboardPage";
@@ -164,6 +164,25 @@ export default function AppRouter() {
     }).catch((error: unknown) => {
       console.error("Could not verify the active account device.", error);
       if (mounted) {
+        if (!navigator.onLine) {
+          void hasCachedDeviceSession(session.user.id).then((verified) => {
+            if (!mounted) return;
+            if (verified) {
+              setDeviceSessionError("");
+              setDeviceSessionReady(true);
+            } else {
+              setDeviceSessionError("Connect to the internet once on this device before using Flex Bar offline.");
+              setDeviceSessionReady(true);
+            }
+          }).catch((cacheError: unknown) => {
+            console.error("Could not check the cached device session.", cacheError);
+            if (mounted) {
+              setDeviceSessionError("This device could not verify its saved offline session. Reconnect and try again.");
+              setDeviceSessionReady(true);
+            }
+          });
+          return;
+        }
         setDeviceSessionError(error instanceof Error ? error.message : "We couldn't verify this device.");
         setDeviceSessionReady(true);
       }

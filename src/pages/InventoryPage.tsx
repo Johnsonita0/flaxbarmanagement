@@ -5,7 +5,7 @@ import type { CurrentUser } from "../lib/api";
 import PageHeading from "../components/PageHeading";
 import { useToast } from "../components/ToastProvider";
 import QuickCalculator from "../components/QuickCalculator";
-import { apiRequest, getProductImageUrl } from "../lib/api";
+import { apiRequest, getProductImageUrl, OfflineRequestQueuedError } from "../lib/api";
 import type { InventoryProduct, VendorPurchase } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import "./../css/OperationsPages.css";
@@ -255,6 +255,10 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
         showToast(error instanceof Error ? `Purchase recorded, but history could not refresh: ${error.message}` : "Purchase recorded, but history could not refresh.", "error");
       });
     } catch (error: unknown) {
+      if (error instanceof OfflineRequestQueuedError) {
+        setShowPurchaseForm(false);
+        setShowPurchaseCalculator(false);
+      }
       showToast(error instanceof Error ? error.message : "We couldn't record this vendor purchase.", "error");
     } finally {
       setSavingPurchase(false);

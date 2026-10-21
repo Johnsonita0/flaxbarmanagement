@@ -1,5 +1,21 @@
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import {
+  cacheApiResponse,
+  createOfflineOperationKey,
+  enqueueOfflineOperation,
+  getCachedApiResponse,
+  cacheVerifiedDeviceSession,
+  hasVerifiedDeviceSession,
+  isOfflineCapableWrite,
+} from "./offlineSync";
+
+export class OfflineRequestQueuedError extends Error {
+  constructor() {
+    super("OFFLINE_QUEUED:This action was saved on this device and will sync when internet is available.");
+    this.name = "OfflineRequestQueuedError";
+  }
+}
 
 export type AppRole =
   | "super_admin"
@@ -154,7 +170,16 @@ export async function claimDeviceSession(session: Session, replaceExisting = fal
   );
   if (response.status === 409 && body?.code === "DEVICE_SESSION_NOT_REGISTERED") return false;
   if (!response.ok) throw new Error(body?.error ?? "We couldn't verify this device. Please try again.");
+  try {
+    await cacheVerifiedDeviceSession(session.user.id);
+  } catch (error: unknown) {
+    console.error("The verified device session could not be cached for offline use.", error);
+  }
   return true;
+}
+
+export function hasCachedDeviceSession(userId: string) {
+  return hasVerifiedDeviceSession(userId);
 }
 
 export async function releaseDeviceSession(session: Session): Promise<void> {
@@ -167,18 +192,56 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   const { data: { session }, error: sessionError } = await supabase.auth.getSession();
   if (sessionError || !session) throw new Error("Your sign-in session has expired. Please sign in again.");
 
+  const method = (init.method ?? "GET").toUpperCase();
+  const canQueue = isOfflineCapableWrite(path, method);
+  const operationKey = canQueue ? createOfflineOperationKey() : null;
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${session.access_token}`);
+  headers.set("Accept", "application/json");
+  if (init.body && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
+  if (operationKey) headers.set("Idempotency-Key", operationKey);
+
+  const saveOffline = async () => {
+    if (!operationKey || (init.body !== undefined && init.body !== null && typeof init.body !== "string")) {
+      throw new Error("This action cannot be saved offline. Reconnect to the internet and try again.");
+    }
+    const storedHeaders: Record<string, string> = {};
+    headers.forEach((value, name) => {
+      if (name.toLowerCase() !== "authorization") storedHeaders[name] = value;
+    });
+    await enqueueOfflineOperation({
+      id: operationKey,
+      userId: session.user.id,
+      key: operationKey,
+      path,
+      method,
+      body: typeof init.body === "string" ? init.body : null,
+      headers: storedHeaders,
+      createdAt: Date.now(),
+      status: "pending",
+      message: null,
+    });
+    throw new OfflineRequestQueuedError();
+  };
+
+  if (canQueue && !navigator.onLine) return saveOffline();
+
   let response: Response;
   try {
     response = await fetch(`${getApiBaseUrl()}${path}`, {
       ...init,
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        Accept: "application/json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...init.headers,
-      },
+      headers,
     });
-  } catch {
+  } catch (error: unknown) {
+    if (canQueue && (error instanceof TypeError || !navigator.onLine)) return saveOffline();
+    if (method === "GET") {
+      try {
+        const cached = await getCachedApiResponse<T>(session.user.id, path);
+        if (cached !== null) return cached;
+      } catch (cacheError: unknown) {
+        console.error("Could not read cached Flex Bar data.", cacheError);
+      }
+    }
     throw new Error("We couldn't reach the workspace. Check your connection and try again.");
   }
 
@@ -189,6 +252,16 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     }
     throw new Error(body?.error ?? "We couldn't complete that request. Please try again.");
   }
+  if (method === "GET") {
+    try {
+      await cacheApiResponse(session.user.id, path, body);
+    } catch (error: unknown) {
+      console.error("Flex Bar data could not be cached for offline use.", error);
+      window.dispatchEvent(new CustomEvent("flexbar:offline-storage-error", {
+        detail: { message: "Some data could not be saved for offline use on this device." },
+      }));
+    }
+  }
   return body as T;
 }
 
@@ -197,12 +270,20 @@ export function adminRequest<T>(path: string, init: RequestInit = {}) {
 }
 
 export async function fetchCurrentUser(session: Session): Promise<CurrentUser> {
-  const response = await fetch(`${getApiBaseUrl()}/api/v1/me`, {
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      Accept: "application/json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBaseUrl()}/api/v1/me`, {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        Accept: "application/json",
+      },
+    });
+  } catch (error: unknown) {
+    if (navigator.onLine) throw error;
+    const cached = await getCachedApiResponse<CurrentUser>(session.user.id, "/api/v1/me");
+    if (cached && cached.id === session.user.id) return cached;
+    throw error;
+  }
 
   if (!response.ok) {
     const body = await response.json().catch(() => null) as { code?: string } | null;
@@ -218,5 +299,11 @@ export async function fetchCurrentUser(session: Session): Promise<CurrentUser> {
     throw new Error("We couldn't load your account details. Please try again or contact your administrator.");
   }
 
-  return (await response.json()) as CurrentUser;
+  const currentUser = (await response.json()) as CurrentUser;
+  try {
+    await cacheApiResponse(session.user.id, "/api/v1/me", currentUser);
+  } catch (error: unknown) {
+    console.error("The signed-in user profile could not be cached for offline use.", error);
+  }
+  return currentUser;
 }

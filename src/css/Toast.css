@@ -31,6 +31,25 @@
 .toast--error .toast__icon { color: #bd3838; }
 .toast--success .toast__icon { color: #21804f; }
 .toast--info .toast__icon { color: #246daf; }
+.offline-sync { position: fixed; z-index: 999; right: 20px; bottom: 18px; width: min(430px, calc(100vw - 32px)); color: #30465d; font-size: 12px; }
+.offline-sync__summary { display: flex; align-items: center; gap: 9px; padding: 10px 12px; border: 1px solid #cfe3d6; border-radius: 10px; background: #f5fbf7; box-shadow: 0 8px 24px rgba(7, 28, 54, .12); }
+.offline-sync__summary--offline { border-color: #f0d7a5; background: #fffaf0; }
+.offline-sync__summary span { flex: 1; }
+.offline-sync__summary button, .offline-sync__panel-heading button { display: inline-flex; align-items: center; gap: 5px; border: 0; color: #276994; background: transparent; font: inherit; font-weight: 650; cursor: pointer; }
+.offline-sync__panel { max-height: min(55vh, 440px); overflow: auto; margin-top: 7px; padding: 12px; border: 1px solid #dce5ef; border-radius: 10px; background: #fff; box-shadow: 0 12px 32px rgba(7, 28, 54, .16); }
+.offline-sync__panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.offline-sync__panel-heading > strong { font-size: 13px; }
+.offline-sync__panel-heading button:disabled { color: #99a5b2; cursor: default; }
+.offline-sync__panel > p { margin: 10px 0 0; color: #78889a; font-size: 11px; line-height: 1.5; }
+.offline-sync__panel ul { display: grid; gap: 8px; margin: 11px 0; padding: 0; list-style: none; }
+.offline-sync__panel li { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 9px; border: 1px solid #e8edf2; border-radius: 8px; }
+.offline-sync__panel li > div { display: grid; min-width: 0; gap: 3px; }
+.offline-sync__panel li strong { font-size: 11px; }
+.offline-sync__panel li small { color: #78889a; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.offline-sync__panel li button { display: grid; flex: 0 0 auto; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 6px; color: #9a4c4c; background: #fff5f5; cursor: pointer; }
+.offline-sync__panel .offline-sync__footnote { padding-top: 9px; border-top: 1px solid #edf1f5; }
+.offline-sync__spinner { animation: offline-sync-spin 1.2s linear infinite; }
+@keyframes offline-sync-spin { to { transform: rotate(360deg); } }
 .toast p { flex: 1; margin: 0; font-size: 13px; line-height: 1.5; }
 .toast__close {
   display: grid;
@@ -52,10 +71,11 @@
 }
 
 @media (max-width: 600px) {
+  .offline-sync { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; width: auto; }
   .toast-stack {
     top: auto;
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(72px + env(safe-area-inset-bottom));
     left: 12px;
     width: auto;
   }

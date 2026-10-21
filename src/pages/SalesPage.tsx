@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IScannerControls } from "@zxing/browser";
 import { Barcode, Calculator, Camera, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
-import { apiRequest, getProductImageUrl } from "../lib/api";
+import { apiRequest, getProductImageUrl, OfflineRequestQueuedError } from "../lib/api";
 import QuickCalculator from "../components/QuickCalculator";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
@@ -216,6 +216,12 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
       setQuantities({});
       await loadSales();
     } catch (reason: unknown) {
+      if (reason instanceof OfflineRequestQueuedError) {
+        setSelectedProductId(null);
+        setShowSaleCalculator(false);
+        setQuantities({});
+        setAdditionalProductId("");
+      }
       showToast(reason instanceof Error ? reason.message : "We couldn't record this sale.", "error");
     } finally {
       setSaving(false);
