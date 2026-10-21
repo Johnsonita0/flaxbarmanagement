@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { IScannerControls } from "@zxing/browser";
+import { Barcode, Camera, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import { apiRequest, getProductImageUrl } from "../lib/api";
 import { useToast } from "../components/ToastProvider";
@@ -10,6 +11,7 @@ interface SalesProduct {
   id: string;
   name: string;
   category: string;
+  barcode: string | null;
   stock: number;
   unit: string;
   departmentId: string;
@@ -49,12 +51,60 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [search, setSearch] = useState("");
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeError, setBarcodeError] = useState("");
+  const [scanningBarcode, setScanningBarcode] = useState(false);
   const [category, setCategory] = useState("All");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [additionalProductId, setAdditionalProductId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const scannerVideoRef = useRef<HTMLVideoElement>(null);
+  const scannerControlsRef = useRef<IScannerControls | null>(null);
+
+  useEffect(() => {
+    if (!scanningBarcode) {
+      scannerControlsRef.current?.stop();
+      scannerControlsRef.current = null;
+      return;
+    }
+    const video = scannerVideoRef.current;
+    if (!video) {
+      setScanningBarcode(false);
+      setBarcodeError("The camera scanner could not be opened. Please try again.");
+      return;
+    }
+    const scannerVideo = video;
+    let cancelled = false;
+    async function startScanner() {
+      try {
+        const { BrowserMultiFormatReader } = await import("@zxing/browser");
+        const reader = new BrowserMultiFormatReader();
+        const controls = await reader.decodeFromVideoDevice(undefined, scannerVideo, (result, _error, scannerControls) => {
+          if (!result) return;
+          scannerControls.stop();
+          scannerControlsRef.current = null;
+          setScanningBarcode(false);
+          addScannedProduct(result.getText());
+        });
+        if (cancelled) controls.stop();
+        else scannerControlsRef.current = controls;
+      } catch (reason: unknown) {
+        console.error("Could not start the product barcode scanner.", reason);
+        if (!cancelled) {
+          setScanningBarcode(false);
+          setBarcodeError(reason instanceof Error ? reason.message : "Camera access failed. Allow camera permission and try again.");
+        }
+      }
+    }
+    void startScanner();
+    return () => {
+      cancelled = true;
+      scannerControlsRef.current?.stop();
+      scannerControlsRef.current = null;
+    };
+  }, [scanningBarcode]);
 
   const loadSales = useCallback(async () => {
     setLoading(true);
@@ -91,6 +141,33 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     setAdditionalProductId("");
     setPaymentMethod("cash");
     setQuantities({ [product.id]: 1 });
+  }
+
+  function addScannedProduct(rawBarcode: string) {
+    const barcode = rawBarcode.trim();
+    if (!barcode) return;
+    const product = products.find((item) => item.barcode === barcode);
+    setBarcodeInput("");
+    setBarcodeError("");
+    if (!product) {
+      setBarcodeError("No product matches that barcode. Check the barcode in Inventory.");
+      return;
+    }
+    if (product.departmentId !== user.departmentId || product.stock < 1) {
+      setBarcodeError(product.stock < 1 ? `${product.name} is out of stock.` : "This product is not assigned to your department.");
+      return;
+    }
+
+    const quantity = quantities[product.id] ?? 0;
+    if (quantity >= product.stock) {
+      setBarcodeError(`Only ${product.stock} ${product.unit} of ${product.name} are available.`);
+      return;
+    }
+    setSelectedProductId((current) => current ?? product.id);
+    setQuantities((current) => ({
+      ...current,
+      [product.id]: Math.min(product.stock, (current[product.id] ?? 0) + 1),
+    }));
   }
 
   function closeSale() {
@@ -163,6 +240,16 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
           <button className="button button--outline" type="button" onClick={() => void loadSales()} disabled={loading}>Refresh stock</button>
         </div>
         <label className="sales-search"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products…" aria-label="Search products" /></label>
+        <form className="sales-barcode" onSubmit={(event) => { event.preventDefault(); addScannedProduct(barcodeInput); }}>
+          <Barcode size={19} aria-hidden="true" />
+          <input value={barcodeInput} onChange={(event) => setBarcodeInput(event.target.value)} placeholder="Scan or enter product barcode" aria-label="Product barcode" autoComplete="off" />
+          <button className="button button--outline" type="submit" disabled={!barcodeInput.trim()}>Add item</button>
+          <button className="button button--outline" type="button" onClick={() => { setBarcodeError(""); setScanningBarcode((current) => !current); }}>
+            <Camera size={15} />{scanningBarcode ? "Stop camera" : "Use camera"}
+          </button>
+        </form>
+        {scanningBarcode && <div className="sales-barcode__camera"><video ref={scannerVideoRef} autoPlay muted playsInline aria-label="Barcode scanner camera" /><p>Point the camera at a product barcode.</p></div>}
+        {barcodeError && <p className="sales-barcode__error" role="alert">{barcodeError}</p>}
         {categories.length > 1 && <div className="tab-strip sales-categories" aria-label="Product categories">
           {categories.map((item) => <button className={`tab-chip${category === item ? " tab-chip--active" : ""}`} key={item} type="button" onClick={() => setCategory(item)}>{item}</button>)}
         </div>}

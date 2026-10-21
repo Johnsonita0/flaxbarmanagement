@@ -24,6 +24,10 @@ Chat shows colleague profile photos, typing presence, and sent/delivered message
 
 New company owners can register from the standalone `/signup` route. It is intentionally not linked from the existing sign-in screen. Supabase Auth public registration must be enabled with email confirmation, and the company-workspace migration must be applied before enabling it. Registration provisions a company-specific workspace and role-appropriate starter departments.
 
+Inventory products can have an optional barcode. Apply `backend/supabase/migrations/20261024_product_barcodes.sql` before deploying barcode support. Staff can scan using a handheld scanner that types into the sales barcode field or use the device camera; matched items are added at the product's configured sale price.
+
+Stock is tracked separately in central inventory, in transit, and in each department. Sending stock reserves it centrally; the department head confirms the actual count, and any shortfall returns to central inventory. Department sales reduce the shared department balance and are reflected against received deliveries using oldest-stock-first balances. Apply `backend/supabase/migrations/20261025_department_stock_ledger.sql` before deploying this stock flow.
+
 ## Vercel
 
 Push alerts require the backend's `20261021_call_push_subscriptions.sql` migration, backend-only `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, and `PUSH_WEBHOOK_SECRET` settings, plus a Supabase Database Webhook on `public.notifications` inserts. Users enable alerts per device from Notifications; once enabled, incoming calls and all workspace notification inserts can alert while the installed PWA is closed. The installer, browser notification, and app icons use the shipped Flex Bar logo.

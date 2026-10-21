@@ -30,6 +30,8 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
   const [editingProduct, setEditingProduct] = useState<InventoryProduct | null>(null);
   const [dispatchProduct, setDispatchProduct] = useState<InventoryProduct | null>(null);
   const [dispatchQuantity, setDispatchQuantity] = useState("1");
+  const [centralStockProduct, setCentralStockProduct] = useState<InventoryProduct | null>(null);
+  const [centralStockQuantity, setCentralStockQuantity] = useState("1");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -103,6 +105,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
     const values = new FormData(form);
     const name = String(values.get("name") ?? "").trim();
     const category = String(values.get("category") ?? "").trim();
+    const barcode = String(values.get("barcode") ?? "").trim();
     const stock = Number(values.get("stock") ?? 0);
     const unit = String(values.get("unit") ?? "items").trim();
     const reorder = Number(values.get("reorder") ?? 5);
@@ -123,9 +126,9 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
     try {
       if (imageFile) imagePath = await uploadProductImage(imageFile);
       if (editingProduct) {
-        const result = await apiRequest<{ product: Pick<InventoryProduct, "id" | "name" | "category" | "unit" | "imagePath" | "departmentId" | "price"> }>(`/api/v1/inventory/products/${editingProduct.id}`, {
+        const result = await apiRequest<{ product: Pick<InventoryProduct, "id" | "name" | "category" | "barcode" | "unit" | "imagePath" | "departmentId" | "price"> }>(`/api/v1/inventory/products/${editingProduct.id}`, {
           method: "PATCH",
-          body: JSON.stringify({ name, category, unit, departmentId, price, ...(imagePath ? { imagePath } : {}) }),
+          body: JSON.stringify({ name, category, barcode, unit, departmentId, price, ...(imagePath ? { imagePath } : {}) }),
         });
         const updated = result.product;
         imageLinked = true;
@@ -147,7 +150,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
       } else {
         const result = await apiRequest<{ product: InventoryProduct; message: string }>("/api/v1/inventory/products", {
           method: "POST",
-          body: JSON.stringify({ name, category, stock, unit, reorder, imagePath, departmentId, price }),
+          body: JSON.stringify({ name, category, barcode, stock, unit, reorder, imagePath, departmentId, price }),
         });
         imageLinked = true;
         setProducts((current) => [...current, result.product].sort((left, right) => left.name.localeCompare(right.name)));
@@ -174,8 +177,8 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
     event.preventDefault();
     if (!dispatchProduct) return;
     const quantity = Number(dispatchQuantity);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
-      showToast("Enter a whole-number quantity greater than zero.", "error");
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > dispatchProduct.centralStock || quantity > 1_000_000) {
+      showToast(`Enter a whole number from 1 to ${Math.min(dispatchProduct.centralStock, 1_000_000)}.`, "error");
       return;
     }
     setDispatching(true);
@@ -184,11 +187,41 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
         method: "POST",
         body: JSON.stringify({ productId: dispatchProduct.id, quantity }),
       });
+      setProducts((current) => current.map((product) => product.id === dispatchProduct.id
+        ? { ...product, centralStock: product.centralStock - quantity, inTransitStock: product.inTransitStock + quantity }
+        : product));
       showToast(result.message, "success");
       setDispatchProduct(null);
       setDispatchQuantity("1");
     } catch (error: unknown) {
       showToast(error instanceof Error ? error.message : "We couldn't dispatch this stock.", "error");
+    } finally {
+      setDispatching(false);
+    }
+  }
+
+  async function addCentralStock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!centralStockProduct) return;
+    const quantity = Number(centralStockQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
+      showToast("Enter a whole-number quantity greater than zero.", "error");
+      return;
+    }
+    setDispatching(true);
+    try {
+      const result = await apiRequest<{ centralStock: number; message: string }>(`/api/v1/inventory/products/${centralStockProduct.id}/central-stock`, {
+        method: "POST",
+        body: JSON.stringify({ quantity }),
+      });
+      setProducts((current) => current.map((product) => product.id === centralStockProduct.id
+        ? { ...product, centralStock: result.centralStock }
+        : product));
+      showToast(result.message, "success");
+      setCentralStockProduct(null);
+      setCentralStockQuantity("1");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "We couldn't add central stock.", "error");
     } finally {
       setDispatching(false);
     }
@@ -209,9 +242,10 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
           return (
             <div className="record-row" key={product.id}>
               <ProductPhoto imagePath={product.imagePath} name={product.name} />
-              <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Stock: {product.stock} {product.unit}</small></span>
+              <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Central: {product.centralStock} · In transit: {product.inTransitStock} · Department: {product.stock} · Total: {product.centralStock + product.inTransitStock + product.stock} {product.unit}</small></span>
               <span className={`status-pill${low ? " status-pill--warning" : ""}`}>{product.stock === 0 ? "Out of Stock" : low ? "Low Stock" : "In Stock"}</span>
-              {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Send stock for ${product.name}`} title={department?.headUserId ? "Send stock to the department head" : "Assign a department and active head before sending stock"} disabled={!department?.headUserId} onClick={() => { setDispatchProduct(product); setDispatchQuantity("1"); }}><Plus size={15} /></button>}
+              {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Add central stock for ${product.name}`} title="Record a new central stock receipt" onClick={() => { setCentralStockProduct(product); setCentralStockQuantity("1"); }}><Plus size={15} /></button>}
+              {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Send stock for ${product.name}`} title={department?.headUserId ? "Reserve central stock and send it to the department head" : "Assign a department and active head before sending stock"} disabled={!department?.headUserId || product.centralStock < 1} onClick={() => { setDispatchProduct(product); setDispatchQuantity("1"); }}><ArrowUpFromLine size={15} /></button>}
               <button className="icon-link inventory-move" aria-label={`Edit ${product.name}`} onClick={() => { setEditingProduct(product); setImageFile(null); setImagePreview(getProductImageUrl(product.imagePath)); setShowForm(true); }}><Pencil size={15} /></button>
               <button className="icon-link inventory-move" aria-label={`Record a movement for ${product.name}`} onClick={onMovements}><ArrowUpFromLine size={16} /></button>
             </div>
@@ -226,10 +260,11 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
             <form className="form-card" onSubmit={(event) => { event.preventDefault(); void saveProduct(event.currentTarget); }}>
               <label>Product name<input name="name" required minLength={2} maxLength={120} defaultValue={editingProduct?.name ?? ""} /></label>
               <label>Category<input name="category" required minLength={2} maxLength={80} defaultValue={editingProduct?.category ?? "Beverage"} /></label>
+              <label>Barcode <span className="muted-copy">Optional · enter the number printed under the barcode</span><input name="barcode" maxLength={100} defaultValue={editingProduct?.barcode ?? ""} /></label>
               {editingProduct && <label>Stock unit<input name="unit" required maxLength={30} defaultValue={editingProduct.unit} placeholder="bottles, cans, cases…" /></label>}
               {!editingProduct && <>
                 <div className="inventory-form-grid">
-                  <label>Opening quantity<input name="stock" type="number" min="0" step="1" defaultValue="0" required /></label>
+                  <label>Opening central stock<input name="stock" type="number" min="0" step="1" defaultValue="0" required /></label>
                   <label>Unit<select name="unit"><option>bottles</option><option>cans</option><option>packs</option><option>items</option><option>kg</option><option>litres</option></select></label>
                 </div>
                 <label>Low-stock alert at<input name="reorder" type="number" min="0" step="1" defaultValue="5" required /></label>
@@ -254,9 +289,20 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
           <div className="preview-modal__heading"><h2 id="dispatch-stock-title">Send stock to department</h2><button className="preview-modal__close" type="button" aria-label="Close" disabled={dispatching} onClick={() => setDispatchProduct(null)}>×</button></div>
           <form className="form-card" onSubmit={(event) => void dispatchStock(event)}>
             <p className="muted-copy">{dispatchProduct.name} · {dispatchProduct.departmentName ?? "Unassigned department"}</p>
-            <label>Quantity to send<input type="number" min="1" max="1000000" step="1" required value={dispatchQuantity} onChange={(event) => setDispatchQuantity(event.target.value)} /></label>
-            <p className="muted-copy">The department head must confirm receipt before this quantity is added to available stock.</p>
+            <label>Quantity to send<input type="number" min="1" max={Math.min(dispatchProduct.centralStock, 1_000_000)} step="1" required value={dispatchQuantity} onChange={(event) => setDispatchQuantity(event.target.value)} /></label>
+            <p className="muted-copy">This reserves central stock immediately. The department head confirms the quantity received; any shortfall returns to central stock.</p>
             <div className="form-actions"><button className="button button--outline" type="button" disabled={dispatching} onClick={() => setDispatchProduct(null)}>Cancel</button><button className="button button--primary" type="submit" disabled={dispatching}>{dispatching ? "Sending…" : "Send for receipt"}</button></div>
+          </form>
+        </section>
+      </div>}
+      {centralStockProduct && <div className="preview-modal" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !dispatching) setCentralStockProduct(null); }}>
+        <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="central-stock-title">
+          <div className="preview-modal__heading"><h2 id="central-stock-title">Receive central stock</h2><button className="preview-modal__close" type="button" aria-label="Close" disabled={dispatching} onClick={() => setCentralStockProduct(null)}>×</button></div>
+          <form className="form-card" onSubmit={(event) => void addCentralStock(event)}>
+            <p className="muted-copy">{centralStockProduct.name} · Current central balance: {centralStockProduct.centralStock} {centralStockProduct.unit}</p>
+            <label>Quantity received into central inventory<input type="number" min="1" max="1000000" step="1" required value={centralStockQuantity} onChange={(event) => setCentralStockQuantity(event.target.value)} /></label>
+            <p className="muted-copy">Stock stays in central inventory until it is sent to a department.</p>
+            <div className="form-actions"><button className="button button--outline" type="button" disabled={dispatching} onClick={() => setCentralStockProduct(null)}>Cancel</button><button className="button button--primary" type="submit" disabled={dispatching}>{dispatching ? "Recording…" : "Record stock receipt"}</button></div>
           </form>
         </section>
       </div>}

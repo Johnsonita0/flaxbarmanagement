@@ -76,9 +76,12 @@ export interface InventoryProduct {
   id: string;
   name: string;
   category: string;
+  barcode: string | null;
   stock: number;
   unit: string;
   reorder: number;
+  centralStock: number;
+  inTransitStock: number;
   imagePath: string | null;
   departmentId: string | null;
   departmentName: string | null;

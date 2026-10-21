@@ -364,7 +364,7 @@ export default function DashboardPage({
       case "Attendance": return <AttendancePage canClockIn={user.role !== "super_admin"} />;
       case "Departments": return <DepartmentsPage canManage={user.role === "super_admin" || user.role === "management_admin"} />;
       case "Inventory": return <InventoryPage user={user} onMovements={() => navigate("Stock Movement")} />;
-      case "Stock Movement": return <StockMovementPage userId={user.id} onBack={() => navigate(user.role === "inventory_officer" || user.role === "management_admin" || user.role === "super_admin" ? "Inventory" : "Overview")} />;
+      case "Stock Movement": return <StockMovementPage user={user} onBack={() => navigate(user.role === "inventory_officer" || user.role === "management_admin" || user.role === "super_admin" ? "Inventory" : "Overview")} />;
       case "Sales": return <SalesPage user={user} />;
       case "Cash Management": return <CashManagementPage user={user} />;
       case "Tasks": return <TasksPage />;
