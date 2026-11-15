@@ -32,10 +32,130 @@ const fallbackImage = "/product-fallback.svg";
 const openFoodFactsPhotos = new Map<string, OpenFoodFactsPhoto | null>();
 const openFoodFactsRequests = new Map<string, Promise<OpenFoodFactsPhoto | null>>();
 const verifiedProductPhotos: Record<string, OpenFoodFactsPhoto> = {
+  cocacola: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/544/900/000/0996/front_en.1129.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5449000000996",
+    showCredit: true,
+  },
+  fanta: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/000/009/037/7204/front_fr.6.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/90377204",
+    showCredit: true,
+  },
+  sprite: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/890/176/403/2905/front_en.28.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/8901764032905",
+    showCredit: true,
+  },
+  nescafe: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/611/101/890/3185/front_ar.19.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/6111018903185",
+    showCredit: true,
+  },
+  chivita: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/615/110/005/4791/front_fr.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/6151100054791",
+    showCredit: true,
+  },
+  maltina: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/502/586/600/1096/front_en.15.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5025866001096",
+    showCredit: true,
+  },
+  amstelmalta: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/502/586/600/0082/front_en.17.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5025866000082",
+    showCredit: true,
+  },
+  fayrouz: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/622/300/008/3536/front_fr.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/6223000083536",
+    showCredit: true,
+  },
+  maltaguinness: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/603/400/010/6091/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/6034000106091",
+    showCredit: true,
+  },
+  heineken: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/311/978/025/9625/front_fr.84.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/3119780259625",
+    showCredit: true,
+  },
+  guinnessforeignextrastout: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/008/382/018/1104/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0083820181104",
+    showCredit: true,
+  },
+  carlorossi: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/008/500/000/6986/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0085000006986",
+    showCredit: true,
+  },
+  "4thstreet": {
+    imageUrl: "https://images.openfoodfacts.org/images/products/600/110/804/9599/front_fr.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/6001108049599",
+    showCredit: true,
+  },
+  jameson: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/501/100/700/3227/front_fr.34.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5011007003227",
+    showCredit: true,
+  },
+  hennessy: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/324/599/641/1714/front_fr.11.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/3245996411714",
+    showCredit: true,
+  },
+  martell: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/008/043/240/0814/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0080432400814",
+    showCredit: true,
+  },
+  remymartin: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/302/448/000/8797/front_fr.14.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/3024480008797",
+    showCredit: true,
+  },
+  tanqueray: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/500/029/102/7248/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5000291027248",
+    showCredit: true,
+  },
+  smirnoffvodka: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/541/031/699/4019/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5410316994019",
+    showCredit: true,
+  },
+  bacardirum: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/008/048/001/6210/front_en.12.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0080480016210",
+    showCredit: true,
+  },
+  moetchandon: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/318/537/072/9960/front_de.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/3185370729960",
+    showCredit: true,
+  },
+  aromaticbitters: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/007/549/600/1602/front_en.21.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0075496001602",
+    showCredit: true,
+  },
+  campari: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/800/004/000/2028/front_de.4.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/8000040002028",
+    showCredit: true,
+  },
+  baileysirishcream: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/008/676/721/0067/front_en.3.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/0086767210067",
+    showCredit: true,
+  },
   absolutvodka: {
     imageUrl: "https://images.openfoodfacts.org/images/products/731/204/001/7683/front_en.31.400.jpg",
     productUrl: "https://world.openfoodfacts.org/product/7312040017683",
-    showCredit: false,
+    showCredit: true,
   },
 };
 
@@ -48,7 +168,7 @@ function nameMatchScore(localName: string, catalogName: string) {
   const catalog = normalizeProductName(catalogName);
   if (local.length < 5 || catalog.length < 5) return 0;
   if (local === catalog) return 3;
-  if (local.includes(catalog) || catalog.includes(local)) return 2;
+  if (catalog.includes(local)) return 2;
 
   const localTokens = localName.toLowerCase().match(/[a-z0-9]+/g) ?? [];
   const catalogTokens = new Set(catalogName.toLowerCase().match(/[a-z0-9]+/g) ?? []);
@@ -95,7 +215,7 @@ function findOpenFoodFactsPhoto(barcode: string | null | undefined, name: string
     const response = await fetch(`https://world.openfoodfacts.org/api/v2/search?${search}`, {
       headers: { Accept: "application/json" },
     });
-    if (!response.ok) return null;
+    if (!response.ok) throw new Error(`Open Food Facts search failed with HTTP ${response.status}`);
 
     const result = await response.json() as OpenFoodFactsResponse;
     const matches = (result.products ?? [])
@@ -114,14 +234,16 @@ function findOpenFoodFactsPhoto(barcode: string | null | undefined, name: string
       showCredit: true,
     };
   })()
+    .then((photo) => {
+      openFoodFactsPhotos.set(cacheKey, photo);
+      return photo;
+    })
     .catch((error: unknown) => {
       console.warn(`Could not find a catalog image for "${name}".`, error);
       return null;
     })
-    .then((photo) => {
-      openFoodFactsPhotos.set(cacheKey, photo);
+    .finally(() => {
       openFoodFactsRequests.delete(cacheKey);
-      return photo;
     });
 
   openFoodFactsRequests.set(cacheKey, request);
