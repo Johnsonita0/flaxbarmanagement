@@ -362,12 +362,26 @@
 .sale-modal-item .quantity-control { gap: 5px; }
 .sale-modal-item .quantity-control button { width: 27px; height: 27px; display: grid; place-items: center; padding: 0; }
 .sale-modal__add-item { padding: 12px 0; border-top: 1px solid #edf1f5; }
-.sale-modal__add-item label, .sale-modal__payment { display: grid; gap: 7px; color: #607287; font-size: 10px; font-weight: 600; }
-.sale-modal__add-item > div { display: flex; gap: 8px; margin-top: 7px; }
-.sale-modal__add-item select, .sale-modal__payment select { min-width: 0; min-height: 38px; padding: 0 10px; border: 1px solid #e1e8ee; border-radius: 8px; color: #354a60; background: white; font: inherit; font-size: 10px; }
-.sale-modal__add-item select { flex: 1; }
-.sale-modal__add-item .button { min-height: 38px; }
-.sale-modal__payment { padding: 13px 0; border-top: 1px solid #edf1f5; }
+.sale-modal__payment { display: grid; gap: 7px; padding: 13px 0; border-top: 1px solid #edf1f5; color: #607287; font-size: 10px; font-weight: 600; }
+.sale-modal__payment select { min-width: 0; min-height: 38px; padding: 0 10px; border: 1px solid #e1e8ee; border-radius: 8px; color: #354a60; background: white; font: inherit; font-size: 10px; }
+.sale-product-picker__trigger { width: 100%; min-height: 40px; justify-content: flex-start; gap: 8px; border-style: dashed; color: #286994; background: #f8fbfd; }
+.sale-product-picker__trigger span { margin-left: auto; color: #8493a2; font-size: 9px; font-weight: 500; }
+.sale-product-picker { display: grid; gap: 8px; }
+.sale-product-picker__search { min-height: 40px; display: flex; align-items: center; gap: 8px; padding: 0 10px; border: 1px solid #dfe8ef; border-radius: 9px; color: #8092a3; background: #fbfcfd; }
+.sale-product-picker__search:focus-within { border-color: #81acd2; box-shadow: 0 0 0 3px rgba(45, 119, 181, .1); }
+.sale-product-picker__search input { width: 100%; min-width: 0; height: 36px; border: 0; outline: 0; color: #354a60; background: transparent; font: inherit; font-size: 10px; }
+.sale-product-picker__search button { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px; color: #8292a2; background: transparent; }
+.sale-product-picker__search button:hover { color: #355a78; background: #edf3f7; }
+.sale-product-picker__list { max-height: 210px; overflow-y: auto; padding: 4px; border: 1px solid #e8edf2; border-radius: 9px; background: white; }
+.sale-product-picker__option { width: 100%; min-height: 54px; display: flex; align-items: center; gap: 9px; padding: 7px; border: 0; border-radius: 7px; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.sale-product-picker__option:hover, .sale-product-picker__option:focus-visible { outline: 0; background: #f1f7fb; }
+.sale-product-picker__image { width: 36px; height: 36px; flex: 0 0 auto; border-radius: 7px; object-fit: cover; background: #edf2f6; }
+.sale-product-picker__image.sales-product-card__placeholder { height: 36px; }
+.sale-product-picker__details { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.sale-product-picker__details strong { overflow: hidden; color: #354b62; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-product-picker__details small { color: #8492a1; font-size: 8px; }
+.sale-product-picker__option > b { flex: 0 0 auto; color: #276696; font-size: 9px; }
+.sale-product-picker__empty { margin: 0; padding: 16px 8px; color: #8492a1; font-size: 9px; text-align: center; }
 .sale-modal__total { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding: 15px 0; border-top: 1px solid #edf1f5; color: #596d81; font-size: 11px; }
 .sale-modal__total strong { color: #1e3d5b; font: 700 21px "Manrope", sans-serif; }
 .sale-modal__actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 11px; }

@@ -58,7 +58,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const [category, setCategory] = useState("All");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
   const [showSaleCalculator, setShowSaleCalculator] = useState(false);
-  const [additionalProductId, setAdditionalProductId] = useState("");
+  const [showProductPicker, setShowProductPicker] = useState(false);
+  const [productPickerSearch, setProductPickerSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -141,7 +142,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   function openSale(product: SalesProduct) {
     setSelectedProductId(product.id);
     setShowSaleCalculator(false);
-    setAdditionalProductId("");
+    setShowProductPicker(false);
+    setProductPickerSearch("");
     setPaymentMethod("cash");
     setQuantities({ [product.id]: 1 });
   }
@@ -178,7 +180,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     setSelectedProductId(null);
     setShowSaleCalculator(false);
     setQuantities({});
-    setAdditionalProductId("");
+    setShowProductPicker(false);
+    setProductPickerSearch("");
   }
 
   function adjustQuantity(product: SalesProduct, difference: number) {
@@ -192,11 +195,11 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     });
   }
 
-  function addAnotherProduct() {
-    const product = products.find((item) => item.id === additionalProductId);
+  function addAnotherProduct(product: SalesProduct) {
     if (!product || product.stock < 1) return;
     setQuantities((current) => ({ ...current, [product.id]: Math.max(1, current[product.id] ?? 0) }));
-    setAdditionalProductId("");
+    setProductPickerSearch("");
+    setShowProductPicker(false);
   }
 
   async function recordSale() {
@@ -220,7 +223,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
         setSelectedProductId(null);
         setShowSaleCalculator(false);
         setQuantities({});
-        setAdditionalProductId("");
+        setShowProductPicker(false);
+        setProductPickerSearch("");
       }
       showToast(reason instanceof Error ? reason.message : "We couldn't record this sale.", "error");
     } finally {
@@ -234,6 +238,9 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     ?? "Department catalog";
   const addableProducts = products.filter((product) =>
     product.stock > 0 && product.departmentId === user.departmentId && !quantities[product.id],
+  );
+  const matchingAddableProducts = addableProducts.filter((product) =>
+    `${product.name} ${product.category}`.toLowerCase().includes(productPickerSearch.trim().toLowerCase()),
   );
 
   return (
@@ -309,7 +316,22 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
               </div>;
             })}
           </div>
-          {addableProducts.length > 0 && <div className="sale-modal__add-item"><label htmlFor="sale-add-product">Add another item</label><div><select id="sale-add-product" value={additionalProductId} onChange={(event) => setAdditionalProductId(event.target.value)}><option value="">Choose a product</option>{addableProducts.map((product) => <option key={product.id} value={product.id}>{product.name} · {money(product.price)}</option>)}</select><button className="button button--outline" type="button" disabled={!additionalProductId} onClick={addAnotherProduct}>Add</button></div></div>}
+          {addableProducts.length > 0 && <div className="sale-modal__add-item">
+            {!showProductPicker
+              ? <button className="button button--outline sale-product-picker__trigger" type="button" onClick={() => setShowProductPicker(true)}><Plus size={15} /> Add another item <span>{addableProducts.length} available</span></button>
+              : <div className="sale-product-picker">
+                <label className="sale-product-picker__search"><Search size={16} aria-hidden="true" /><input autoFocus value={productPickerSearch} onChange={(event) => setProductPickerSearch(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { setShowProductPicker(false); setProductPickerSearch(""); } }} placeholder="Quick search products…" aria-label="Search available products" /><button type="button" aria-label="Close product search" onClick={() => { setShowProductPicker(false); setProductPickerSearch(""); }}><X size={15} /></button></label>
+                <div className="sale-product-picker__list" aria-label="Available products">
+                  {matchingAddableProducts.length > 0
+                    ? matchingAddableProducts.map((product) => <button className="sale-product-picker__option" type="button" key={product.id} onClick={() => addAnotherProduct(product)}>
+                      <ProductPhoto imagePath={product.imagePath} className="sale-product-picker__image" />
+                      <span className="sale-product-picker__details"><strong>{product.name}</strong><small>{product.stock} {product.unit} available</small></span>
+                      <b>{money(product.price)}</b>
+                    </button>)
+                    : <p className="sale-product-picker__empty">{addableProducts.length ? "No products match your search." : "No available products."}</p>}
+                </div>
+              </div>}
+          </div>}
           <label className="sale-modal__payment">Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} disabled={saving}><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option></select></label>
           <div className="sale-modal__total"><span>Total to collect</span><strong>{money(total)}</strong></div>
           <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Cancel</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
