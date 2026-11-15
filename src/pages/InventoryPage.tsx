@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { ArrowDownToLine, ArrowUpFromLine, Calculator, ImagePlus, Package, Pencil, Plus, Search } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import PageHeading from "../components/PageHeading";
+import ProductPhoto from "../components/ProductPhoto";
 import { useToast } from "../components/ToastProvider";
 import QuickCalculator from "../components/QuickCalculator";
 import { apiRequest, getProductImageUrl, OfflineRequestQueuedError } from "../lib/api";
@@ -12,14 +13,6 @@ import "./../css/OperationsPages.css";
 
 const allowedImageTypes = ["image/jpeg", "image/png", "image/webp"];
 interface InventoryDepartment { id: string; name: string; headUserId: string | null; }
-
-function ProductPhoto({ imagePath, name }: { imagePath: string | null; name: string }) {
-  const [failed, setFailed] = useState(false);
-  const imageUrl = getProductImageUrl(imagePath);
-  return imageUrl && !failed
-    ? <img className="product-thumbnail" src={imageUrl} alt={`${name} product`} onError={() => setFailed(true)} />
-    : <span className="product-token" aria-label={`${name} has no product image`}><Package size={18} /></span>;
-}
 
 export default function InventoryPage({ onMovements, user }: { onMovements: () => void; user: CurrentUser }) {
   const { showToast } = useToast();
@@ -307,7 +300,7 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
           const department = departments.find((item) => item.id === product.departmentId);
           return (
             <div className="record-row" key={product.id}>
-              <ProductPhoto imagePath={product.imagePath} name={product.name} />
+              <ProductPhoto imagePath={product.imagePath} name={product.name} barcode={product.barcode} className="product-thumbnail" />
               <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Central: {product.centralStock} · In transit: {product.inTransitStock} · Department: {product.stock} · Total: {product.centralStock + product.inTransitStock + product.stock} {product.unit}</small></span>
               <span className={`status-pill${low ? " status-pill--warning" : ""}`}>{product.stock === 0 ? "Out of Stock" : low ? "Low Stock" : "In Stock"}</span>
               {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Record a vendor stock purchase for ${product.name}`} title="Record a vendor purchase for this product" onClick={() => { setPurchaseProductId(product.id); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }}><Plus size={16} /></button>}

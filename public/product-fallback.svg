@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4f8fb"/>
+      <stop offset="1" stop-color="#e6eef4"/>
+    </linearGradient>
+    <linearGradient id="bottle" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff"/>
+      <stop offset="1" stop-color="#d8e5ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="320" height="320" rx="28" fill="url(#background)"/>
+  <circle cx="247" cy="73" r="44" fill="#dbe8f0" opacity=".7"/>
+  <circle cx="71" cy="252" r="59" fill="#dbe8f0" opacity=".55"/>
+  <path d="M139 57h42v35l18 25v112c0 12-10 22-22 22h-34c-12 0-22-10-22-22V117l18-25V57Z" fill="url(#bottle)" stroke="#91a9ba" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M137 58h46v18h-46z" rx="5" fill="#7fa0b8"/>
+  <path d="M121 135h78v57h-78z" rx="8" fill="#2d709e"/>
+  <path d="M139 151h42m-42 14h31m-31 14h36" stroke="#dceaf2" stroke-width="5" stroke-linecap="round" opacity=".9"/>
+  <path d="M79 95h28m-14-14v28m115 139h24m-12-12v24" stroke="#9fb4c3" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+</svg>

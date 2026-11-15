@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IScannerControls } from "@zxing/browser";
-import { Barcode, Calculator, Camera, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
+import { Barcode, Calculator, Camera, Eye, Minus, Package, Plus, Search, ShoppingCart, X } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
-import { apiRequest, getProductImageUrl, OfflineRequestQueuedError } from "../lib/api";
+import { apiRequest, OfflineRequestQueuedError } from "../lib/api";
 import QuickCalculator from "../components/QuickCalculator";
+import ProductPhoto from "../components/ProductPhoto";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
 import "./../css/OperationsPages.css";
@@ -33,18 +34,6 @@ interface RecordedSale {
 
 const money = (amount: number) => `₦${amount.toLocaleString()}`;
 
-function ProductPhoto({ imagePath, className }: { imagePath: string | null; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const imageUrl = getProductImageUrl(imagePath);
-  if (!imageUrl || failed) {
-    const placeholderClass = className === "sale-modal-item__image"
-      ? "sale-modal-item__image sale-modal-item__placeholder"
-      : "sales-product-card__placeholder";
-    return <span className={placeholderClass}><Package size={22} aria-hidden="true" /></span>;
-  }
-  return <img className={className} src={imageUrl} alt="" onError={() => setFailed(true)} />;
-}
-
 export default function SalesPage({ user }: { user: CurrentUser }) {
   const { showToast } = useToast();
   const [products, setProducts] = useState<SalesProduct[]>([]);
@@ -57,6 +46,8 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const [scanningBarcode, setScanningBarcode] = useState(false);
   const [category, setCategory] = useState("All");
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [detailProduct, setDetailProduct] = useState<SalesProduct | null>(null);
+  const [detailQuantity, setDetailQuantity] = useState("1");
   const [showSaleCalculator, setShowSaleCalculator] = useState(false);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productPickerSearch, setProductPickerSearch] = useState("");
@@ -139,13 +130,35 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const selectedProducts = products.filter((product) => (quantities[product.id] ?? 0) > 0);
   const total = selectedProducts.reduce((sum, product) => sum + product.price * quantities[product.id], 0);
 
-  function openSale(product: SalesProduct) {
-    setSelectedProductId(product.id);
+  function openProductDetails(product: SalesProduct) {
+    setDetailProduct(product);
+    setDetailQuantity("1");
+  }
+
+  function openCheckout() {
+    const firstItem = selectedProducts[0];
+    if (!firstItem) return;
+    setSelectedProductId(firstItem.id);
     setShowSaleCalculator(false);
     setShowProductPicker(false);
     setProductPickerSearch("");
-    setPaymentMethod("cash");
-    setQuantities({ [product.id]: 1 });
+  }
+
+  function addProductToCart(product: SalesProduct, proceedToCheckout: boolean) {
+    if (!canSell || product.departmentId !== user.departmentId) {
+      showToast("This product is not available for sale from your department.", "error");
+      return;
+    }
+    const quantity = Number(detailQuantity);
+    const alreadyInCart = quantities[product.id] ?? 0;
+    const remaining = product.stock - alreadyInCart;
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > remaining) {
+      showToast(`Enter a whole number from 1 to ${remaining}.`, "error");
+      return;
+    }
+    setQuantities((current) => ({ ...current, [product.id]: (current[product.id] ?? 0) + quantity }));
+    setDetailProduct(null);
+    if (proceedToCheckout) setSelectedProductId(product.id);
   }
 
   function addScannedProduct(rawBarcode: string) {
@@ -179,7 +192,6 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     if (saving) return;
     setSelectedProductId(null);
     setShowSaleCalculator(false);
-    setQuantities({});
     setShowProductPicker(false);
     setProductPickerSearch("");
   }
@@ -217,12 +229,16 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
       setSelectedProductId(null);
       setShowSaleCalculator(false);
       setQuantities({});
+      setDetailProduct(null);
+      setShowProductPicker(false);
+      setProductPickerSearch("");
       await loadSales();
     } catch (reason: unknown) {
       if (reason instanceof OfflineRequestQueuedError) {
         setSelectedProductId(null);
         setShowSaleCalculator(false);
         setQuantities({});
+        setDetailProduct(null);
         setShowProductPicker(false);
         setProductPickerSearch("");
       }
@@ -242,10 +258,17 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const matchingAddableProducts = addableProducts.filter((product) =>
     `${product.name} ${product.category}`.toLowerCase().includes(productPickerSearch.trim().toLowerCase()),
   );
+  const cartUnitCount = selectedProducts.reduce((sum, product) => sum + quantities[product.id], 0);
+  const detailRemainingStock = detailProduct
+    ? Math.max(0, detailProduct.stock - (quantities[detailProduct.id] ?? 0))
+    : 0;
+  const canAddDetailProduct = Boolean(
+    detailProduct && canSell && detailProduct.departmentId === user.departmentId && detailRemainingStock > 0,
+  );
 
   return (
     <section className="module-page">
-      <PageHeading title="Sales" description={canSell ? "Choose a product to start a sale. Stock updates as soon as the sale is complete." : "Product catalog and recent sales across enabled departments."} />
+      <PageHeading title="Sales" description={canSell ? "Add products to a bill, then review and complete the sale when you are ready." : "Product catalog and recent sales across enabled departments."} />
       {error && <div className="alert alert--error" role="alert">{error}</div>}
 
       {canSell && <section className="sales-catalog" aria-labelledby="sales-catalog-title">
@@ -255,7 +278,10 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
             <h2 id="sales-catalog-title">What are you selling?</h2>
             <p>Pick an item to review the sale and confirm payment.</p>
           </div>
-          <button className="button button--outline" type="button" onClick={() => void loadSales()} disabled={loading}>Refresh stock</button>
+          <div className="sales-catalog__actions">
+            {cartUnitCount > 0 && <button className="button button--primary" type="button" onClick={openCheckout}><ShoppingCart size={15} /> Review bill · {cartUnitCount} · {money(total)}</button>}
+            <button className="button button--outline" type="button" onClick={() => void loadSales()} disabled={loading}>Refresh stock</button>
+          </div>
         </div>
         <label className="sales-search"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search products…" aria-label="Search products" /></label>
         <form className="sales-barcode" onSubmit={(event) => { event.preventDefault(); addScannedProduct(barcodeInput); }}>
@@ -278,17 +304,20 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
             const availableToSell = canSell && product.departmentId === user.departmentId;
             return <article className="sales-product-card" key={product.id}>
               <div className="sales-product-card__image">
-                <ProductPhoto imagePath={product.imagePath} />
+                <button className="sales-product-card__image-action" type="button" aria-label={`View ${product.name} details`} onClick={() => openProductDetails(product)}>
+                  <ProductPhoto imagePath={product.imagePath} name={product.name} barcode={product.barcode} />
+                </button>
                 <span className={`stock-label${product.stock === 0 ? " stock-label--empty" : lowStock ? " stock-label--low" : ""}`}>
                   {product.stock === 0 ? "Out of stock" : lowStock ? "Low stock" : "In stock"}
                 </span>
               </div>
               <div className="sales-product-card__body">
                 <span className="sales-product-card__category">{product.category}</span>
-                <h3>{product.name}</h3>
+                <h3><button className="sales-product-card__name" type="button" onClick={() => openProductDetails(product)}>{product.name}</button></h3>
                 <div className="sales-product-card__details"><strong>{money(product.price)}</strong><span>{product.stock} {product.unit} available</span></div>
-                <button className="button button--primary full-width" type="button" disabled={product.stock < 1 || loading || !availableToSell} onClick={() => openSale(product)}>
-                  <ShoppingCart size={15} /> {product.stock < 1 ? "Unavailable" : availableToSell ? "Sell" : "View only"}
+                {(quantities[product.id] ?? 0) > 0 && <span className="sales-product-card__cart-status">In bill · {quantities[product.id]}</span>}
+                <button className="button button--primary full-width" type="button" disabled={loading || !availableToSell} onClick={() => openProductDetails(product)}>
+                  <Eye size={15} /> {product.stock < 1 ? "Details · out of stock" : availableToSell ? "View details" : "View only"}
                 </button>
               </div>
             </article>;
@@ -300,6 +329,56 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
         {loading ? <p className="empty-state">Loading sales…</p> : sales.length === 0 ? <p className="empty-state">No sales recorded yet.</p> : sales.map((sale) => <div className="record-row" key={sale.id}><span className="product-token"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{sale.departmentName} · {sale.sellerName}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.createdAt))} · {sale.paymentMethod} · {sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</small></span><strong className="record-row__meta">{money(sale.total)}</strong></div>)}
       </div>
 
+      {detailProduct && <div className="sale-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetailProduct(null); }}>
+        <section className="sale-product-detail" role="dialog" aria-modal="true" aria-labelledby="sale-product-detail-title">
+          <header className="sale-product-detail__header">
+            <div><span className="eyebrow">PRODUCT DETAILS</span><h2 id="sale-product-detail-title">{detailProduct.name}</h2><p>{detailProduct.category}</p></div>
+            <button className="icon-button" type="button" aria-label="Close product details" onClick={() => setDetailProduct(null)}><X size={19} /></button>
+          </header>
+          <div className="sale-product-detail__hero">
+            <ProductPhoto imagePath={detailProduct.imagePath} name={detailProduct.name} barcode={detailProduct.barcode} />
+            <div><span>Unit price</span><strong>{money(detailProduct.price)}</strong><small>{detailProduct.departmentName}</small></div>
+          </div>
+          <div className="sale-product-detail__facts">
+            <div><span>Available</span><strong>{Math.max(0, detailProduct.stock - (quantities[detailProduct.id] ?? 0))} {detailProduct.unit}</strong></div>
+            <div><span>Already in bill</span><strong>{quantities[detailProduct.id] ?? 0} {detailProduct.unit}</strong></div>
+            <div><span>Barcode</span><strong>{detailProduct.barcode || "Not set"}</strong></div>
+            <div><span>Category</span><strong>{detailProduct.category}</strong></div>
+          </div>
+          <label className="sale-product-detail__quantity">Quantity to add
+            <input
+              type="number"
+              min="1"
+              max={detailRemainingStock}
+              step="1"
+              value={detailQuantity}
+              onChange={(event) => setDetailQuantity(event.target.value)}
+              disabled={!canAddDetailProduct}
+            />
+          </label>
+          {!canAddDetailProduct && <p className="sale-product-detail__notice">
+            {detailRemainingStock === 0
+              ? (quantities[detailProduct.id] ?? 0) > 0 ? "All available stock for this product is already in the bill." : "This product is currently out of stock."
+              : "This product is view-only for your account or department."}
+          </p>}
+          <div className="sale-product-detail__actions">
+            <button className="button button--outline" type="button" onClick={() => setDetailProduct(null)}>Back to products</button>
+            <button
+              className="button button--outline"
+              type="button"
+              disabled={!canAddDetailProduct}
+              onClick={() => addProductToCart(detailProduct, false)}
+            ><Plus size={15} /> Add to bill</button>
+            <button
+              className="button button--primary"
+              type="button"
+              disabled={!canAddDetailProduct}
+              onClick={() => addProductToCart(detailProduct, true)}
+            ><ShoppingCart size={15} /> Add & review bill</button>
+          </div>
+        </section>
+      </div>}
+
       {selectedProductId && <div className={`sale-modal-backdrop${showSaleCalculator ? " sale-modal-backdrop--calculator" : ""}`} onMouseDown={(event) => { if (event.target === event.currentTarget) closeSale(); }}>
         <div className={`sale-modal-layout${showSaleCalculator ? " sale-modal-layout--calculator" : ""}`}>
         <section className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-modal-title">
@@ -308,9 +387,10 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
             <div className="sale-modal__header-actions"><button className={`button button--outline calculator-toggle${showSaleCalculator ? " calculator-toggle--active" : ""}`} type="button" aria-expanded={showSaleCalculator} aria-controls="sale-calculator" onClick={() => setShowSaleCalculator((current) => !current)}><Calculator size={15} /> Calculator</button><button className="icon-button" type="button" aria-label="Close sale" onClick={closeSale} disabled={saving}><X size={19} /></button></div>
           </header>
           <div className="sale-modal__items">
+            {selectedProducts.length === 0 && <p className="sale-product-picker__empty">Your bill is empty. Add another item to continue.</p>}
             {selectedProducts.map((product) => {
               return <div className="sale-modal-item" key={product.id}>
-                <ProductPhoto imagePath={product.imagePath} className="sale-modal-item__image" />
+                <ProductPhoto imagePath={product.imagePath} name={product.name} barcode={product.barcode} className="sale-modal-item__image" />
                 <div className="sale-modal-item__info"><strong>{product.name}</strong><small>{money(product.price)} each · {product.stock} available</small><b>{money(product.price * quantities[product.id])}</b></div>
                 <div className="quantity-control"><button type="button" aria-label={`Remove one ${product.name}`} disabled={saving} onClick={() => adjustQuantity(product, -1)}><Minus size={14} /></button><span>{quantities[product.id]}</span><button type="button" aria-label={`Add one ${product.name}`} disabled={saving || quantities[product.id] >= product.stock} onClick={() => adjustQuantity(product, 1)}><Plus size={14} /></button></div>
               </div>;
@@ -324,7 +404,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
                 <div className="sale-product-picker__list" aria-label="Available products">
                   {matchingAddableProducts.length > 0
                     ? matchingAddableProducts.map((product) => <button className="sale-product-picker__option" type="button" key={product.id} onClick={() => addAnotherProduct(product)}>
-                      <ProductPhoto imagePath={product.imagePath} className="sale-product-picker__image" />
+                      <ProductPhoto imagePath={product.imagePath} name={product.name} barcode={product.barcode} className="sale-product-picker__image" />
                       <span className="sale-product-picker__details"><strong>{product.name}</strong><small>{product.stock} {product.unit} available</small></span>
                       <b>{money(product.price)}</b>
                     </button>)
@@ -334,7 +414,7 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
           </div>}
           <label className="sale-modal__payment">Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} disabled={saving}><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option></select></label>
           <div className="sale-modal__total"><span>Total to collect</span><strong>{money(total)}</strong></div>
-          <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Cancel</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
+          <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Back to products</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
         </section>
         {showSaleCalculator && <div id="sale-calculator"><QuickCalculator onClose={() => setShowSaleCalculator(false)} /></div>}
         </div>
