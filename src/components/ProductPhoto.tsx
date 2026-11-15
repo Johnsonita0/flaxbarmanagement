@@ -122,6 +122,11 @@ const verifiedProductPhotos: Record<string, OpenFoodFactsPhoto> = {
     productUrl: "https://world.openfoodfacts.org/product/5000291027248",
     showCredit: true,
   },
+  gordonsgin: {
+    imageUrl: "https://images.openfoodfacts.org/images/products/500/028/911/0808/front_en.9.400.jpg",
+    productUrl: "https://world.openfoodfacts.org/product/5000289110808",
+    showCredit: true,
+  },
   smirnoffvodka: {
     imageUrl: "https://images.openfoodfacts.org/images/products/541/031/699/4019/front_en.3.400.jpg",
     productUrl: "https://world.openfoodfacts.org/product/5410316994019",
