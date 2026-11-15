@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ArrowUpRight, Check, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, RefreshCw, Send, Store, Truck, UsersRound } from "lucide-react";
 import { apiRequest } from "../lib/api";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
 import "./../css/OperationsPages.css";
 
-interface HandoverProduct { id: string; name: string; stock: number; unit: string; }
-interface HandoverStaff { id: string; name: string; }
-interface HandoverItem { productId: string; productName: string; sentQuantity: number; receivedQuantity: number | null; }
-interface Handover {
-  id: string;
-  senderId: string;
-  senderName: string;
-  receiverId: string;
-  receiverName: string;
-  status: "pending" | "accepted";
-  createdAt: string;
-  acceptedAt: string | null;
-  items: HandoverItem[];
+interface AllocationProduct { id: string; name: string; unit: string; departmentStock: number; }
+interface AllocationStaff { id: string; name: string; }
+interface StockAllocation { productId: string; userId: string; quantity: number; }
+interface OwnStock { productId: string; productName: string; unit: string; quantity: number; }
+interface AllocationData {
+  canAllocate: boolean;
+  products: AllocationProduct[];
+  staff: AllocationStaff[];
+  allocations: StockAllocation[];
+  ownStock: OwnStock[];
 }
 interface StockDelivery {
   id: string;
@@ -26,9 +23,8 @@ interface StockDelivery {
   unit: string;
   quantity: number;
   receivedQuantity: number;
-  soldQuantity: number;
-  remainingQuantity: number;
   departmentStock: number;
+  allocatedStock: number;
   createdByName: string;
   createdAt: string;
   receivedByName: string | null;
@@ -38,119 +34,66 @@ interface StockDelivery {
 
 export default function StockMovementPage({ onBack, user }: { onBack: () => void; user: { id: string; departmentId: string | null } }) {
   const { showToast } = useToast();
-  const [products, setProducts] = useState<HandoverProduct[]>([]);
-  const [staff, setStaff] = useState<HandoverStaff[]>([]);
-  const [handovers, setHandovers] = useState<Handover[]>([]);
   const [deliveries, setDeliveries] = useState<StockDelivery[]>([]);
-  const [receiverId, setReceiverId] = useState("");
-  const [sentCounts, setSentCounts] = useState<Record<string, number>>({});
-  const [receivedCounts, setReceivedCounts] = useState<Record<string, Record<string, number>>>({});
-  const [deliveryReceivedCounts, setDeliveryReceivedCounts] = useState<Record<string, number>>({});
+  const [allocationData, setAllocationData] = useState<AllocationData | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedRepId, setSelectedRepId] = useState("");
+  const [allocationQuantity, setAllocationQuantity] = useState("1");
+  const [deliveryReceivedCounts, setDeliveryReceivedCounts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const loadHandoverData = useCallback(async () => {
+  const loadStockWorkflow = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const stock = await apiRequest<{ deliveries: StockDelivery[] }>("/api/v1/inventory/deliveries");
+      const stockRequest = apiRequest<{ deliveries: StockDelivery[] }>("/api/v1/inventory/deliveries");
+      const allocationRequest = user.departmentId
+        ? apiRequest<AllocationData>("/api/v1/inventory/allocations")
+        : Promise.resolve(null);
+      const [stock, allocation] = await Promise.all([stockRequest, allocationRequest]);
       setDeliveries(stock.deliveries);
+      setAllocationData(allocation);
+      if (allocation?.canAllocate) {
+        setSelectedProductId((current) => allocation.products.some((product) => product.id === current)
+          ? current
+          : allocation.products[0]?.id ?? "");
+        setSelectedRepId((current) => allocation.staff.some((member) => member.id === current)
+          ? current
+          : allocation.staff[0]?.id ?? "");
+      }
       setDeliveryReceivedCounts((current) => {
         const next = { ...current };
         for (const delivery of stock.deliveries) {
-          if (delivery.receivedAt === null && next[delivery.id] === undefined) next[delivery.id] = delivery.quantity;
+          if (delivery.receivedAt === null && next[delivery.id] === undefined) next[delivery.id] = String(delivery.quantity);
         }
         return next;
       });
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "We couldn't load stock deliveries.");
-      setLoading(false);
-      return;
-    }
-    if (!user.departmentId) {
-      setProducts([]);
-      setStaff([]);
-      setHandovers([]);
-      setLoading(false);
-      return;
-    }
-    try {
-      const [options, history] = await Promise.all([
-        apiRequest<{ products: HandoverProduct[]; staff: HandoverStaff[] }>("/api/v1/sales/handover-options"),
-        apiRequest<{ handovers: Handover[] }>("/api/v1/sales/handovers"),
-      ]);
-      setProducts(options.products);
-      setStaff(options.staff);
-      setHandovers(history.handovers);
-      setSentCounts((current) => Object.keys(current).length > 0
-        ? current
-        : Object.fromEntries(options.products.map((product) => [product.id, product.stock])));
-      setReceivedCounts((current) => {
-        const next = { ...current };
-        for (const handover of history.handovers) {
-          if (!next[handover.id]) next[handover.id] = Object.fromEntries(handover.items.map((item) => [item.productId, item.sentQuantity]));
-        }
-        return next;
-      });
-    } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "We couldn't load shift handovers.");
+      setError(reason instanceof Error ? reason.message : "We couldn't load the stock workflow.");
     } finally {
       setLoading(false);
     }
   }, [user.departmentId]);
 
-  useEffect(() => { void loadHandoverData(); }, [loadHandoverData]);
-
-  async function sendHandover() {
-    if (!receiverId || products.length === 0) return;
-    setSaving(true);
-    try {
-      const result = await apiRequest<{ message: string }>("/api/v1/sales/handovers", {
-        method: "POST",
-        body: JSON.stringify({
-          receiverId,
-          items: products.map((product) => ({ productId: product.id, quantity: sentCounts[product.id] ?? 0 })),
-        }),
-      });
-      showToast(result.message, "success");
-      setReceiverId("");
-      await loadHandoverData();
-    } catch (reason: unknown) {
-      showToast(reason instanceof Error ? reason.message : "We couldn't send this handover.", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function acceptHandover(handover: Handover) {
-    setSaving(true);
-    try {
-      const result = await apiRequest<{ message: string }>(`/api/v1/sales/handovers/${handover.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ items: handover.items.map((item) => ({
-          productId: item.productId,
-          quantity: receivedCounts[handover.id]?.[item.productId] ?? item.sentQuantity,
-        })) }),
-      });
-      showToast(result.message, "success");
-      await loadHandoverData();
-    } catch (reason: unknown) {
-      showToast(reason instanceof Error ? reason.message : "We couldn't accept this handover.", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
+  useEffect(() => { void loadStockWorkflow(); }, [loadStockWorkflow]);
 
   async function receiveDelivery(delivery: StockDelivery) {
+    const receivedQuantityInput = deliveryReceivedCounts[delivery.id] ?? String(delivery.quantity);
+    const receivedQuantity = receivedQuantityInput.trim() === "" ? Number.NaN : Number(receivedQuantityInput);
+    if (!Number.isInteger(receivedQuantity) || receivedQuantity < 0 || receivedQuantity > delivery.quantity) {
+      showToast(`Enter a whole-number received quantity between 0 and ${delivery.quantity}.`, "error");
+      return;
+    }
     setSaving(true);
     try {
       const result = await apiRequest<{ message: string }>(`/api/v1/inventory/deliveries/${delivery.id}/receive`, {
         method: "POST",
-        body: JSON.stringify({ receivedQuantity: deliveryReceivedCounts[delivery.id] ?? delivery.quantity }),
+        body: JSON.stringify({ receivedQuantity }),
       });
       showToast(result.message, "success");
-      await loadHandoverData();
+      await loadStockWorkflow();
     } catch (reason: unknown) {
       showToast(reason instanceof Error ? reason.message : "We couldn't confirm this stock delivery.", "error");
     } finally {
@@ -158,42 +101,87 @@ export default function StockMovementPage({ onBack, user }: { onBack: () => void
     }
   }
 
-  function handoverDate(value: string) {
+  async function allocateStock(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const quantity = Number(allocationQuantity);
+    if (!selectedProductId || !selectedRepId || !Number.isInteger(quantity) || quantity < 1) {
+      showToast("Choose a sales rep and product, then enter a whole-number quantity.", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await apiRequest<{ message: string }>("/api/v1/inventory/allocations", {
+        method: "POST",
+        body: JSON.stringify({ productId: selectedProductId, userId: selectedRepId, quantity }),
+      });
+      showToast(result.message, "success");
+      setAllocationQuantity("1");
+      await loadStockWorkflow();
+    } catch (reason: unknown) {
+      showToast(reason instanceof Error ? reason.message : "We couldn't allocate stock.", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function movementDate(value: string) {
     return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
   }
 
+  const productById = new Map((allocationData?.products ?? []).map((product) => [product.id, product]));
+  const staffById = new Map((allocationData?.staff ?? []).map((member) => [member.id, member]));
+
   return (
     <section className="module-page">
-      <PageHeading title="Stock receipt and handover" description="Department heads confirm deliveries; current department stock updates as staff sell." />
+      <PageHeading title="Stock workflow" description="Follow stock from the main store to the sales rep. Sales deduct from the rep's balance." />
       <button className="icon-link" onClick={onBack}><ArrowLeft size={15} /> Back to inventory</button>
       {error && <div className="alert alert--error" role="alert">{error}</div>}
+
+      <div className="stock-flow-steps" aria-label="Stock workflow steps">
+        <div><Store size={18} /><span><strong>Main store</strong><small>Receive and count</small></span></div>
+        <span className="stock-flow-steps__arrow">→</span>
+        <div><Truck size={18} /><span><strong>Department</strong><small>Head confirms receipt</small></span></div>
+        <span className="stock-flow-steps__arrow">→</span>
+        <div><UsersRound size={18} /><span><strong>Sales rep</strong><small>Head allocates stock</small></span></div>
+        <span className="stock-flow-steps__arrow">→</span>
+        <div><Check size={18} /><span><strong>Sale</strong><small>Rep stock decreases</small></span></div>
+      </div>
+
+      {allocationData?.canAllocate && <div className="surface-card form-card">
+        <div className="surface-card__heading"><div><h2>Allocate stock to a sales rep</h2><p>This moves units out of department stock and into the rep’s personal selling balance.</p></div></div>
+        {allocationData.products.length === 0 || allocationData.staff.length === 0
+          ? <p className="empty-state">Assign products to this department and add active department staff before allocating stock.</p>
+          : <form onSubmit={(event) => void allocateStock(event)}>
+            <label>Sales rep<select value={selectedRepId} onChange={(event) => setSelectedRepId(event.target.value)} required>{allocationData.staff.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label>
+            <label>Product<select value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)} required>{allocationData.products.map((product) => <option key={product.id} value={product.id}>{product.name} · {product.departmentStock} {product.unit} in department</option>)}</select></label>
+            <label>Quantity to allocate<input type="number" min="1" max={productById.get(selectedProductId)?.departmentStock ?? 1} step="1" value={allocationQuantity} onChange={(event) => setAllocationQuantity(event.target.value)} required /></label>
+            <button className="button button--primary full-width" type="submit" disabled={saving || loading || !selectedRepId || !selectedProductId || Number(allocationQuantity) > (productById.get(selectedProductId)?.departmentStock ?? 0)}><Send size={15} />{saving ? "Allocating…" : "Allocate to rep"}</button>
+          </form>}
+        {allocationData.allocations.length > 0 && <div className="stock-rep-balances">
+          <h3>Stock currently held by reps</h3>
+          {allocationData.allocations.map((allocation, index) => <div className="record-row" key={`${allocation.productId}-${allocation.userId}-${index}`}>
+            <span className="record-row__main"><strong>{productById.get(allocation.productId)?.name ?? "Product"}</strong><small>{staffById.get(allocation.userId)?.name ?? "Sales rep"}</small></span>
+            <strong>{allocation.quantity} {productById.get(allocation.productId)?.unit ?? "items"}</strong>
+          </div>)}
+        </div>}
+      </div>}
+
+      {!allocationData?.canAllocate && allocationData && <div className="surface-card">
+        <div className="surface-card__heading"><div><h2>My sales stock</h2><p>These are the units assigned to you. Completed sales reduce this balance.</p></div></div>
+        {allocationData.ownStock.length === 0
+          ? <p className="empty-state">You have no stock assigned yet. Ask your department head to allocate stock before making sales.</p>
+          : allocationData.ownStock.map((item) => <div className="record-row" key={item.productId}><span className="record-row__main"><strong>{item.productName}</strong></span><strong>{item.quantity} {item.unit}</strong></div>)}
+      </div>}
+
       <div className="surface-card">
-        <div className="surface-card__heading"><div><h2>Department stock deliveries</h2><p>Stock is reserved centrally when sent and added to the department only after the head confirms receipt.</p></div><span className="status-pill status-pill--neutral">{deliveries.filter((delivery) => !delivery.receivedAt).length} pending</span></div>
-        {loading ? <p className="empty-state">Loading stock deliveries…</p> : deliveries.length === 0 ? <p className="empty-state">No stock deliveries have been recorded yet.</p> : deliveries.map((delivery) => <div className="handover-card" key={delivery.id}>
-          <div className="handover-card__heading"><div><strong>{delivery.productName} · {delivery.quantity} {delivery.unit}</strong><small>{delivery.departmentName} · Sent by {delivery.createdByName} · {handoverDate(delivery.createdAt)}</small></div><span className={`status-pill${delivery.receivedAt ? "" : " status-pill--warning"}`}>{delivery.receivedAt ? delivery.receivedQuantity === 0 ? "Rejected" : "Received" : "Awaiting department head"}</span></div>
+        <div className="surface-card__heading"><div><h2>Department deliveries</h2><p>Stock moves from the main store to the department only after the department head confirms the received count.</p></div><div className="surface-card__heading-actions"><span className="status-pill status-pill--neutral">{deliveries.filter((delivery) => !delivery.receivedAt).length} pending</span><button className="button button--outline" type="button" onClick={() => void loadStockWorkflow()} disabled={loading}><RefreshCw size={14} /> Refresh</button></div></div>
+        {loading ? <p className="empty-state">Loading department deliveries…</p> : deliveries.length === 0 ? <p className="empty-state">No department deliveries yet. Send stock from Inventory when the main store is ready.</p> : deliveries.map((delivery) => <div className="handover-card" key={delivery.id}>
+          <div className="handover-card__heading"><div><strong>{delivery.productName} · {delivery.quantity} {delivery.unit}</strong><small>{delivery.departmentName} · Sent by {delivery.createdByName} · {movementDate(delivery.createdAt)}</small></div><span className={`status-pill${delivery.receivedAt ? "" : " status-pill--warning"}`}>{delivery.receivedAt ? delivery.receivedQuantity === 0 ? "Rejected" : "Received" : "Awaiting department head"}</span></div>
           {delivery.receivedAt
-            ? <p className="stock-delivery-receipt">{delivery.receivedQuantity === 0 ? "Rejected" : `Received ${delivery.receivedQuantity} of ${delivery.quantity}`} by {delivery.receivedByName} · Sold {delivery.soldQuantity} · Remaining {delivery.remainingQuantity} · Department balance {delivery.departmentStock} {delivery.unit} · {handoverDate(delivery.receivedAt)}</p>
-            : delivery.canReceive && <div className="stock-delivery-receipt"><label>Quantity received<input type="number" min="0" max={delivery.quantity} step="1" value={deliveryReceivedCounts[delivery.id] ?? delivery.quantity} onChange={(event) => setDeliveryReceivedCounts((current) => ({ ...current, [delivery.id]: Number(event.target.value) }))} /></label><button className="button button--primary" type="button" disabled={saving} onClick={() => void receiveDelivery(delivery)}><Check size={15} />{saving ? "Confirming…" : (deliveryReceivedCounts[delivery.id] ?? delivery.quantity) === 0 ? "Reject and return stock" : "Confirm received quantity"}</button></div>}
+            ? <p className="stock-delivery-receipt">{delivery.receivedQuantity === 0 ? "Rejected" : `Received ${delivery.receivedQuantity} of ${delivery.quantity}`} by {delivery.receivedByName} · Current department stock {delivery.departmentStock} · With reps {delivery.allocatedStock} · {movementDate(delivery.receivedAt)}</p>
+            : delivery.canReceive && <div className="stock-delivery-receipt"><label>Quantity received<input type="number" min="0" max={delivery.quantity} step="1" value={deliveryReceivedCounts[delivery.id] ?? String(delivery.quantity)} onChange={(event) => setDeliveryReceivedCounts((current) => ({ ...current, [delivery.id]: event.target.value }))} /></label><button className="button button--primary" type="button" disabled={saving} onClick={() => void receiveDelivery(delivery)}><Check size={15} />{saving ? "Confirming…" : (deliveryReceivedCounts[delivery.id] ?? String(delivery.quantity)) === "0" ? "Reject and return stock" : "Confirm received quantity"}</button></div>}
         </div>)}
       </div>
-      {user.departmentId && <div className="surface-card form-card">
-        <div className="surface-card__heading"><div><h2>Send to next shift</h2><p>Receiver confirmation is required before stock updates.</p></div><button className="button button--outline" type="button" onClick={() => void loadHandoverData()} disabled={loading}><RefreshCw size={15} /> Refresh</button></div>
-        <label>Next-shift staff<select value={receiverId} onChange={(event) => setReceiverId(event.target.value)}><option value="">Choose a department colleague</option>{staff.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-        {loading ? <p className="empty-state">Loading department stock…</p> : products.length === 0 ? <p className="empty-state">No products are assigned to this department.</p> : <div className="handover-count-list">{products.map((product) => <label className="handover-count-row" key={product.id}><span><strong>{product.name}</strong><small>Current system count: {product.stock} {product.unit}</small></span><input type="number" min="0" step="1" aria-label={`Count of ${product.name} to hand over`} value={sentCounts[product.id] ?? 0} onChange={(event) => setSentCounts((current) => ({ ...current, [product.id]: Number(event.target.value) }))} /></label>)}</div>}
-        <button className="button button--primary full-width" type="button" disabled={saving || loading || !receiverId || products.length === 0 || handovers.some((handover) => handover.status === "pending")} onClick={() => void sendHandover()}>{saving ? "Sending…" : handovers.some((handover) => handover.status === "pending") ? "Pending handover" : "Send stock counts"}</button>
-      </div>}
-      {user.departmentId && <div className="surface-card">
-        <div className="surface-card__heading"><div><h2>Incoming and recent handovers</h2><p>Check each item; differences are recorded during acceptance.</p></div><span className="status-pill status-pill--neutral">{handovers.length}</span></div>
-        {loading ? <p className="empty-state">Loading handovers…</p> : handovers.length === 0 ? <p className="empty-state">No handovers yet.</p> : handovers.map((handover) => <div className="handover-card" key={handover.id}>
-          <div className="handover-card__heading"><div><strong>{handover.senderName} <ArrowUpRight size={13} /> {handover.receiverName}</strong><small>{handoverDate(handover.createdAt)}</small></div><span className={`status-pill${handover.status === "pending" ? " status-pill--warning" : ""}`}>{handover.status === "pending" ? "Awaiting receipt" : "Accepted"}</span></div>
-          {handover.items.map((item) => {
-            const received = receivedCounts[handover.id]?.[item.productId] ?? item.sentQuantity;
-            const difference = item.receivedQuantity === null ? received - item.sentQuantity : item.receivedQuantity - item.sentQuantity;
-            return <div className="handover-item-row" key={item.productId}><span><strong>{item.productName}</strong><small>Sent {item.sentQuantity}{item.receivedQuantity !== null ? ` · Received ${item.receivedQuantity}` : ""}{handover.status === "accepted" && difference !== 0 ? ` · Difference ${difference > 0 ? "+" : ""}${difference}` : ""}</small></span>{handover.status === "pending" && handover.receiverId === user.id ? <input type="number" min="0" step="1" aria-label={`Received count for ${item.productName}`} value={received} onChange={(event) => setReceivedCounts((current) => ({ ...current, [handover.id]: { ...current[handover.id], [item.productId]: Number(event.target.value) } }))} /> : <span className="status-pill status-pill--neutral">{item.receivedQuantity ?? item.sentQuantity}</span>}</div>;
-          })}
-          {handover.status === "pending" && handover.receiverId === user.id && <button className="button button--primary" type="button" disabled={saving} onClick={() => void acceptHandover(handover)}><Check size={15} />{saving ? "Accepting…" : "Confirm received counts"}</button>}
-        </div>)}
-      </div>}
     </section>
   );
 }

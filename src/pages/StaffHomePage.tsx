@@ -99,7 +99,7 @@ export default function StaffHomePage({
         <button onClick={() => onNavigate("Chat")}><MessageCircle size={20} /><span>Team chat</span></button>
         <button onClick={() => onNavigate("Attendance")}><CalendarCheck size={20} /><span>Attendance</span></button>
         {salesEnabled && <button onClick={() => onNavigate("Sales")}><ShoppingCart size={20} /><span>New sale</span></button>}
-        <button onClick={() => onNavigate("Stock Movement")}><Package size={20} /><span>Shift handover</span></button>
+        <button onClick={() => onNavigate("Stock Movement")}><Package size={20} /><span>My stock</span></button>
       </div>
     </section>
   );

@@ -70,6 +70,21 @@ export default function AppRouter() {
   }, []);
 
   useEffect(() => {
+    const url = new URL(window.location.href);
+    const paymentStatus = url.searchParams.get("payment");
+    if (!paymentStatus) return;
+    if (paymentStatus === "success") {
+      showToast("Paystack payment verified and the sale was completed.", "success");
+    } else if (paymentStatus === "failed") {
+      showToast("Paystack payment was not completed; reserved stock was released.", "error");
+    } else {
+      showToast("Paystack could not confirm the payment yet. Contact your administrator before retrying.", "error");
+    }
+    url.searchParams.delete("payment");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [showToast]);
+
+  useEffect(() => {
     if (!supabase) {
       setReturningUser(false);
       setAuthLoading(false);

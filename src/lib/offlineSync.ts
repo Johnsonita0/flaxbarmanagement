@@ -81,6 +81,7 @@ export function isOfflineCapableWrite(path: string, method: string) {
   if (["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) return false;
   if (!path.startsWith("/api/v1/")) return false;
   return !/^\/api\/v1\/(session|calls|call-push|push-notifications|chat|attendance)(\/|$)/.test(path)
+    && !/^\/api\/v1\/sales\/payments(\/|$)/.test(path)
     && !/^\/api\/v1\/admin\/users(\/|$)/.test(path)
     && !/^\/api\/v1\/profile\/lock-pin(\/|$)/.test(path);
 }

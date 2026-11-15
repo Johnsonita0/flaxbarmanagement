@@ -5,6 +5,7 @@ import type { CurrentUser } from "../lib/api";
 import { apiRequest, OfflineRequestQueuedError } from "../lib/api";
 import QuickCalculator from "../components/QuickCalculator";
 import ProductPhoto from "../components/ProductPhoto";
+import SalesPaymentManagement, { type PaymentAccount } from "../components/SalesPaymentManagement";
 import { useToast } from "../components/ToastProvider";
 import PageHeading from "../components/PageHeading";
 import "./../css/OperationsPages.css";
@@ -27,6 +28,8 @@ interface RecordedSale {
   sellerName: string;
   departmentName: string;
   paymentMethod: string;
+  paymentStatus: string;
+  paymentReference: string | null;
   total: number;
   createdAt: string;
   items: { name: string; quantity: number; total: number }[];
@@ -40,6 +43,12 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const [sales, setSales] = useState<RecordedSale[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [paymentMethod, setPaymentMethod] = useState("cash");
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [paystackEnabled, setPaystackEnabled] = useState(false);
+  const [paymentAccountId, setPaymentAccountId] = useState("");
+  const [transactionReference, setTransactionReference] = useState("");
+  const [dailyTransferCode, setDailyTransferCode] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   const [barcodeError, setBarcodeError] = useState("");
@@ -104,12 +113,15 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     setLoading(true);
     setError("");
     try {
-      const [catalog, history] = await Promise.all([
+      const [catalog, history, paymentOptions] = await Promise.all([
         apiRequest<{ products: SalesProduct[] }>("/api/v1/sales/catalog"),
         apiRequest<{ sales: RecordedSale[] }>("/api/v1/sales/history"),
+        apiRequest<{ accounts: PaymentAccount[]; paystackEnabled: boolean }>("/api/v1/sales/payments/accounts"),
       ]);
       setProducts(catalog.products);
       setSales(history.sales);
+      setPaymentAccounts(paymentOptions.accounts);
+      setPaystackEnabled(paymentOptions.paystackEnabled);
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : "We couldn't load sales.");
     } finally {
@@ -218,13 +230,31 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
     if (selectedProducts.length === 0) return;
     setSaving(true);
     try {
-      const result = await apiRequest<{ message: string }>("/api/v1/sales/sales", {
-        method: "POST",
-        body: JSON.stringify({
-          paymentMethod,
-          items: selectedProducts.map((product) => ({ productId: product.id, quantity: quantities[product.id] })),
-        }),
-      });
+      const items = selectedProducts.map((product) => ({ productId: product.id, quantity: quantities[product.id] }));
+      if (paymentMethod === "paystack") {
+        const result = await apiRequest<{ authorizationUrl: string }>("/api/v1/sales/payments/paystack/initialize", {
+          method: "POST",
+          body: JSON.stringify({ customerEmail, items }),
+        });
+        window.location.assign(result.authorizationUrl);
+        return;
+      }
+
+      const result = paymentMethod === "transfer" || paymentMethod === "opay"
+        ? await apiRequest<{ message: string }>("/api/v1/sales/payments/transfers", {
+          method: "POST",
+          body: JSON.stringify({
+            paymentMethod,
+            bankAccountId: paymentAccountId,
+            transactionReference,
+            dailyCode: dailyTransferCode,
+            items,
+          }),
+        })
+        : await apiRequest<{ message: string }>("/api/v1/sales/sales", {
+          method: "POST",
+          body: JSON.stringify({ paymentMethod, items }),
+        });
       showToast(result.message, "success");
       setSelectedProductId(null);
       setShowSaleCalculator(false);
@@ -232,6 +262,10 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
       setDetailProduct(null);
       setShowProductPicker(false);
       setProductPickerSearch("");
+      setPaymentAccountId("");
+      setTransactionReference("");
+      setDailyTransferCode("");
+      setCustomerEmail("");
       await loadSales();
     } catch (reason: unknown) {
       if (reason instanceof OfflineRequestQueuedError) {
@@ -265,6 +299,14 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
   const canAddDetailProduct = Boolean(
     detailProduct && canSell && detailProduct.departmentId === user.departmentId && detailRemainingStock > 0,
   );
+  const paymentAccountOptions = paymentAccounts.filter((account) => account.method === paymentMethod);
+  const selectedPaymentAccount = paymentAccountOptions.find((account) => account.id === paymentAccountId);
+  const manualPayment = paymentMethod === "transfer" || paymentMethod === "opay";
+  const paymentReady = manualPayment
+    ? Boolean(selectedPaymentAccount && transactionReference.trim() && dailyTransferCode.trim())
+    : paymentMethod === "paystack"
+      ? paystackEnabled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail.trim())
+      : true;
 
   return (
     <section className="module-page">
@@ -324,9 +366,16 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
           })}</div>}
       </section>}
 
+      <SalesPaymentManagement
+        user={user}
+        accounts={paymentAccounts}
+        onAccountsChanged={() => void loadSales()}
+        onTransfersChanged={() => void loadSales()}
+      />
+
       <div className="surface-card sales-history">
         <div className="surface-card__heading"><div><h2>Recent sales</h2><p>Latest completed transactions</p></div><span className="status-pill status-pill--neutral">{sales.length}</span></div>
-        {loading ? <p className="empty-state">Loading sales…</p> : sales.length === 0 ? <p className="empty-state">No sales recorded yet.</p> : sales.map((sale) => <div className="record-row" key={sale.id}><span className="product-token"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{sale.departmentName} · {sale.sellerName}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.createdAt))} · {sale.paymentMethod} · {sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</small></span><strong className="record-row__meta">{money(sale.total)}</strong></div>)}
+        {loading ? <p className="empty-state">Loading sales…</p> : sales.length === 0 ? <p className="empty-state">No sales recorded yet.</p> : sales.map((sale) => <div className="record-row" key={sale.id}><span className="product-token"><ShoppingCart size={17} /></span><span className="record-row__main"><strong>{sale.departmentName} · {sale.sellerName}</strong><small>{new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(sale.createdAt))} · {sale.paymentMethod} · {sale.paymentStatus === "pending_verification" ? "Awaiting HOD verification" : sale.paymentStatus === "pending_payment" ? "Awaiting Paystack payment" : sale.paymentStatus === "rejected" ? "Transfer rejected" : sale.paymentStatus === "failed" ? "Payment failed" : "Paid"}{sale.paymentReference ? ` · Ref ${sale.paymentReference}` : ""} · {sale.items.map((item) => `${item.name} × ${item.quantity}`).join(", ")}</small></span><strong className="record-row__meta">{money(sale.total)}</strong></div>)}
       </div>
 
       {detailProduct && <div className="sale-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setDetailProduct(null); }}>
@@ -412,9 +461,28 @@ export default function SalesPage({ user }: { user: CurrentUser }) {
                 </div>
               </div>}
           </div>}
-          <label className="sale-modal__payment">Payment method<select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} disabled={saving}><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option></select></label>
+          <label className="sale-modal__payment">Payment method<select value={paymentMethod} onChange={(event) => { setPaymentMethod(event.target.value); setPaymentAccountId(""); setTransactionReference(""); setDailyTransferCode(""); setCustomerEmail(""); }} disabled={saving}><option value="cash">Cash</option><option value="card">Card</option><option value="transfer">Bank transfer</option><option value="opay">OPay</option><option value="paystack" disabled={!paystackEnabled}>Paystack{paystackEnabled ? "" : " · not configured"}</option></select></label>
+          {manualPayment && <>
+            <label className="sale-modal__payment">Company receiving account<select value={paymentAccountId} onChange={(event) => setPaymentAccountId(event.target.value)} disabled={saving || paymentAccountOptions.length === 0} required>
+              <option value="">Select an account</option>
+              {paymentAccountOptions.map((account) => <option value={account.id} key={account.id}>{account.label}{account.bankName ? ` · ${account.bankName}` : ""}</option>)}
+            </select></label>
+            {selectedPaymentAccount && <div className="sales-payment-account">
+              <strong>{selectedPaymentAccount.accountName}</strong>
+              <span>{selectedPaymentAccount.accountNumber}</span>
+              {selectedPaymentAccount.bankName && <small>{selectedPaymentAccount.bankName}</small>}
+            </div>}
+            {paymentAccountOptions.length === 0 && <p className="sale-product-detail__notice">No active {paymentMethod === "opay" ? "OPay" : "bank transfer"} account is configured. Ask the Super Admin to add one.</p>}
+            <label className="sale-modal__payment">Transfer reference<input value={transactionReference} onChange={(event) => setTransactionReference(event.target.value)} disabled={saving} maxLength={160} autoComplete="off" placeholder="Enter the bank or OPay transaction reference" /></label>
+            <label className="sale-modal__payment">Today's staff transfer code<input value={dailyTransferCode} onChange={(event) => setDailyTransferCode(event.target.value.toUpperCase().replace(/[^A-F0-9]/g, "").slice(0, 16))} disabled={saving} maxLength={16} autoComplete="off" placeholder="16-character code from your department head" /></label>
+            <p className="sales-payment-note">The sale stays pending until your department head verifies the transfer reference.</p>
+          </>}
+          {paymentMethod === "paystack" && <>
+            <label className="sale-modal__payment">Customer email<input type="email" value={customerEmail} onChange={(event) => setCustomerEmail(event.target.value)} disabled={saving} autoComplete="email" placeholder="customer@example.com" /></label>
+            <p className="sales-payment-note">{paystackEnabled ? "Paystack will confirm the payment before the sale is marked paid." : "Ask the Super Admin to configure the Paystack secret key in the backend deployment environment."}</p>
+          </>}
           <div className="sale-modal__total"><span>Total to collect</span><strong>{money(total)}</strong></div>
-          <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Back to products</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0}><ShoppingCart size={15} />{saving ? "Completing sale…" : "Complete sale"}</button></footer>
+          <footer className="sale-modal__actions"><button className="button button--outline" type="button" onClick={closeSale} disabled={saving}>Back to products</button><button className="button button--primary" type="button" onClick={() => void recordSale()} disabled={saving || selectedProducts.length === 0 || !paymentReady || (manualPayment && paymentAccountOptions.length === 0) || (paymentMethod === "paystack" && !paystackEnabled)}><ShoppingCart size={15} />{saving ? paymentMethod === "paystack" ? "Opening Paystack…" : "Completing sale…" : paymentMethod === "paystack" ? "Pay with Paystack" : manualPayment ? "Submit transfer for verification" : "Complete sale"}</button></footer>
         </section>
         {showSaleCalculator && <div id="sale-calculator"><QuickCalculator onClose={() => setShowSaleCalculator(false)} /></div>}
         </div>

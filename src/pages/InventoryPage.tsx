@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, Calculator, ImagePlus, Package, Pencil, Plus, Search } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Calculator, ImagePlus, Package, Pencil, Plus, Search, ShoppingCart, Store, Truck, UsersRound } from "lucide-react";
 import type { CurrentUser } from "../lib/api";
 import PageHeading from "../components/PageHeading";
 import ProductPhoto from "../components/ProductPhoto";
@@ -28,6 +28,12 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
   const [purchaseProductId, setPurchaseProductId] = useState("");
   const [showPurchaseForm, setShowPurchaseForm] = useState(false);
   const [showPurchaseCalculator, setShowPurchaseCalculator] = useState(false);
+  const [openingStockProduct, setOpeningStockProduct] = useState<InventoryProduct | null>(null);
+  const [savingOpeningStock, setSavingOpeningStock] = useState(false);
+  const [departmentStockProduct, setDepartmentStockProduct] = useState<InventoryProduct | null>(null);
+  const [departmentStockDepartmentId, setDepartmentStockDepartmentId] = useState("");
+  const [departmentStockQuantity, setDepartmentStockQuantity] = useState("0");
+  const [savingDepartmentStock, setSavingDepartmentStock] = useState(false);
   const [paymentPurchase, setPaymentPurchase] = useState<VendorPurchase | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -70,7 +76,8 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
   }, [imagePreview]);
 
   const filtered = useMemo(() => products.filter((product) => {
-    const state = product.stock === 0 ? "Out of Stock" : product.stock <= product.reorder ? "Low Stock" : "In Stock";
+    const total = product.centralStock + product.inTransitStock + product.stock + (product.allocatedStock ?? 0);
+    const state = total === 0 ? "Out of Stock" : total <= product.reorder ? "Low Stock" : "In Stock";
     const matchesQuery = `${product.name} ${product.category}`.toLowerCase().includes(query.trim().toLowerCase());
     return (filter === "All" || filter === state) && matchesQuery;
   }), [filter, products, query]);
@@ -258,6 +265,33 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
     }
   }
 
+  async function recordOpeningStock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!openingStockProduct) return;
+    const form = event.currentTarget;
+    const quantity = Number(new FormData(form).get("quantity"));
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
+      showToast("Enter the counted opening quantity as a whole number above zero.", "error");
+      return;
+    }
+    setSavingOpeningStock(true);
+    try {
+      const result = await apiRequest<{ centralStock: number; message: string }>("/api/v1/inventory/opening-stock", {
+        method: "POST",
+        body: JSON.stringify({ productId: openingStockProduct.id, quantity }),
+      });
+      setProducts((current) => current.map((product) => product.id === openingStockProduct.id
+        ? { ...product, centralStock: result.centralStock }
+        : product));
+      showToast(result.message, "success");
+      setOpeningStockProduct(null);
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "We couldn't record the opening stock count.", "error");
+    } finally {
+      setSavingOpeningStock(false);
+    }
+  }
+
   async function recordVendorPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!paymentPurchase) return;
@@ -285,24 +319,83 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
     }
   }
 
+  async function recordDepartmentStock(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!departmentStockProduct) return;
+    const quantity = Number(departmentStockQuantity);
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > 1_000_000) {
+      showToast("Enter a department stock count from zero to 1,000,000.", "error");
+      return;
+    }
+    if (!departmentStockDepartmentId) {
+      showToast("Choose a department before counting stock.", "error");
+      return;
+    }
+    setSavingDepartmentStock(true);
+    try {
+      const result = await apiRequest<{ product: InventoryProduct; message: string }>(`/api/v1/inventory/products/${departmentStockProduct.id}/department-stock`, {
+        method: "POST",
+        body: JSON.stringify({ departmentId: departmentStockDepartmentId, quantity }),
+      });
+      setProducts((current) => current.map((product) => product.id === departmentStockProduct.id
+        ? {
+            ...product,
+            ...result.product,
+            departmentName: result.product.departmentName ?? product.departmentName,
+            departmentId: result.product.departmentId ?? product.departmentId,
+            stock: result.product.stock,
+          }
+        : product));
+      setDepartmentStockProduct(null);
+      setDepartmentStockDepartmentId("");
+      setDepartmentStockQuantity("0");
+      showToast(result.message, "success");
+    } catch (error: unknown) {
+      showToast(error instanceof Error ? error.message : "We couldn't set this department's stock count.", "error");
+    } finally {
+      setSavingDepartmentStock(false);
+    }
+  }
+
   return (
     <section className="module-page">
-      <PageHeading title="Inventory" description="Stock levels, department selling prices and shift handovers." action={{ label: "Add Product", onClick: () => { setEditingProduct(null); setShowForm(true); } }} />
-      {canDispatchStock && <button className="button button--outline" type="button" onClick={() => { setPurchaseProductId(products[0]?.id ?? ""); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }} disabled={products.length === 0}><Plus size={15} /> Record vendor purchase</button>}
-      <button className="icon-link" onClick={onMovements}><ArrowDownToLine size={15} /> View stock movement history</button>
+      <PageHeading title="Inventory" description="One clear path: receive stock, send it to a department, allocate it to a rep, then sell." action={{ label: "Add Product", onClick: () => { setEditingProduct(null); setShowForm(true); } }} />
+      <div className="inventory-workflow" aria-label="Stock workflow">
+        <div><span className="inventory-workflow__icon"><Store size={17} /></span><span><b>1. Main store</b><small>Vendor purchase or one-time opening count</small></span></div>
+        <span className="inventory-workflow__arrow">→</span>
+        <div><span className="inventory-workflow__icon"><Truck size={17} /></span><span><b>2. Department</b><small>Send stock; head confirms receipt</small></span></div>
+        <span className="inventory-workflow__arrow">→</span>
+        <div><span className="inventory-workflow__icon"><UsersRound size={17} /></span><span><b>3. Sales rep</b><small>Head allocates rep stock</small></span></div>
+        <span className="inventory-workflow__arrow">→</span>
+        <div><span className="inventory-workflow__icon"><ShoppingCart size={17} /></span><span><b>4. Sale</b><small>Sale reduces that rep’s stock</small></span></div>
+      </div>
+      {canDispatchStock && <div className="inventory-actions">
+        <button className="button button--primary" type="button" onClick={() => { setPurchaseProductId(products[0]?.id ?? ""); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }} disabled={products.length === 0}><Plus size={15} /> Vendor purchase</button>
+        <button className="button button--outline" type="button" onClick={() => setOpeningStockProduct(products.find((product) => product.centralStock === 0) ?? products[0] ?? null)} disabled={products.length === 0}><Package size={15} /> Opening stock count</button>
+        <button className="button button--outline" type="button" onClick={() => {
+          const product = products[0] ?? null;
+          setDepartmentStockProduct(product);
+          setDepartmentStockDepartmentId(product?.departmentId ?? departments[0]?.id ?? "");
+          setDepartmentStockQuantity(String(product?.stock ?? 0));
+        }} disabled={products.length === 0}><Store size={15} /> Department stock count</button>
+        <button className="button button--outline" type="button" onClick={onMovements}><ArrowDownToLine size={15} /> Stock workflow</button>
+      </div>}
       <label className="search-field"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products…" /></label>
       <div className="tab-strip">{["All", "In Stock", "Low Stock", "Out of Stock"].map((tab) => <button className={`tab-chip${filter === tab ? " tab-chip--active" : ""}`} key={tab} onClick={() => setFilter(tab)}>{tab}</button>)}</div>
       {loadError && <p className="inline-error" role="alert">{loadError}</p>}
       <div className="surface-card inventory-list">
         {loading && <p className="empty-state">Loading inventory…</p>}
         {!loading && filtered.map((product) => {
-          const low = product.stock <= product.reorder;
+          const totalStock = product.centralStock + product.inTransitStock + product.stock + (product.allocatedStock ?? 0);
+          const low = totalStock > 0 && totalStock <= product.reorder;
           const department = departments.find((item) => item.id === product.departmentId);
+          const stockStatus = totalStock === 0 ? "Out of Stock" : low ? "Low Stock" : "In Stock";
           return (
             <div className="record-row" key={product.id}>
               <ProductPhoto imagePath={product.imagePath} name={product.name} barcode={product.barcode} className="product-thumbnail" />
-              <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Central: {product.centralStock} · In transit: {product.inTransitStock} · Department: {product.stock} · Total: {product.centralStock + product.inTransitStock + product.stock} {product.unit}</small></span>
-              <span className={`status-pill${low ? " status-pill--warning" : ""}`}>{product.stock === 0 ? "Out of Stock" : low ? "Low Stock" : "In Stock"}</span>
+              <span className="record-row__main"><strong>{product.name}</strong><small>{product.departmentName ?? "Unassigned"} · ₦{product.price.toLocaleString()} · Main store {product.centralStock} · In transit {product.inTransitStock} · Department {product.stock} · With reps {product.allocatedStock ?? 0} · Total {totalStock} {product.unit}</small></span>
+              <span className={`status-pill${low ? " status-pill--warning" : ""}`}>{stockStatus}</span>
+              {canDispatchStock && product.centralStock === 0 && <button className="icon-link inventory-move" aria-label={`Count opening stock for ${product.name}`} title="Record a one-time opening stock count" onClick={() => setOpeningStockProduct(product)}><Package size={15} /></button>}
               {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Record a vendor stock purchase for ${product.name}`} title="Record a vendor purchase for this product" onClick={() => { setPurchaseProductId(product.id); setShowPurchaseCalculator(false); setShowPurchaseForm(true); }}><Plus size={16} /></button>}
               {canDispatchStock && <button className="icon-link inventory-move" aria-label={`Send stock for ${product.name}`} title={department?.headUserId ? "Reserve central stock and send it to the department head" : "Assign a department and active head before sending stock"} disabled={!department?.headUserId || product.centralStock < 1} onClick={() => { setDispatchProduct(product); setDispatchQuantity("1"); }}><ArrowUpFromLine size={15} /></button>}
               <button className="icon-link inventory-move" aria-label={`Edit ${product.name}`} onClick={() => { setEditingProduct(product); setImageFile(null); setImagePreview(getProductImageUrl(product.imagePath)); setShowForm(true); }}><Pencil size={15} /></button>
@@ -327,6 +420,42 @@ export default function InventoryPage({ onMovements, user }: { onMovements: () =
           </div>
         ))}
       </section>}
+      {openingStockProduct && <div className="preview-modal">
+        <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="opening-stock-title">
+          <div className="preview-modal__heading"><h2 id="opening-stock-title">Opening stock count</h2><button className="preview-modal__close" type="button" aria-label="Close" disabled={savingOpeningStock} onClick={() => setOpeningStockProduct(null)}>×</button></div>
+          <form className="form-card" onSubmit={(event) => void recordOpeningStock(event)}>
+            <p className="muted-copy">Count existing stock in the main store once. This is a starting balance, not a vendor purchase; use Vendor purchase for new deliveries.</p>
+            <label>Product<select value={openingStockProduct.id} onChange={(event) => {
+              const product = products.find((item) => item.id === event.target.value);
+              if (product) setOpeningStockProduct(product);
+            }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+            <label>Counted main-store quantity<input name="quantity" type="number" min="1" max="1000000" step="1" required /></label>
+            <div className="form-actions"><button className="button button--outline" type="button" disabled={savingOpeningStock} onClick={() => setOpeningStockProduct(null)}>Cancel</button><button className="button button--primary" type="submit" disabled={savingOpeningStock}>{savingOpeningStock ? "Recording…" : "Save opening count"}</button></div>
+          </form>
+        </section>
+      </div>}
+      {departmentStockProduct && <div className="preview-modal">
+        <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="department-stock-title">
+          <div className="preview-modal__heading"><h2 id="department-stock-title">Add department stock count</h2><button className="preview-modal__close" type="button" aria-label="Close" disabled={savingDepartmentStock} onClick={() => { setDepartmentStockProduct(null); setDepartmentStockDepartmentId(""); setDepartmentStockQuantity("0"); }}>×</button></div>
+          <form className="form-card" onSubmit={(event) => void recordDepartmentStock(event)}>
+            <p className="muted-copy">Set the current counted stock for a department so products are no longer shown as unavailable when they are in stock.</p>
+            <label>Product<select value={departmentStockProduct.id} onChange={(event) => {
+              const product = products.find((item) => item.id === event.target.value);
+              if (product) {
+                setDepartmentStockProduct(product);
+                setDepartmentStockDepartmentId(product.departmentId ?? departments[0]?.id ?? "");
+                setDepartmentStockQuantity(String(product.stock));
+              }
+            }}>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select></label>
+            <label>Department<select value={departmentStockDepartmentId} onChange={(event) => setDepartmentStockDepartmentId(event.target.value)} required>
+              <option value="" disabled>Select department</option>
+              {departments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+            </select></label>
+            <label>Counted department stock<input type="number" min="0" max="1000000" step="1" value={departmentStockQuantity} onChange={(event) => setDepartmentStockQuantity(event.target.value)} required /></label>
+            <div className="form-actions"><button className="button button--outline" type="button" disabled={savingDepartmentStock} onClick={() => { setDepartmentStockProduct(null); setDepartmentStockDepartmentId(""); setDepartmentStockQuantity("0"); }}>Cancel</button><button className="button button--primary" type="submit" disabled={savingDepartmentStock}>{savingDepartmentStock ? "Saving…" : "Save department count"}</button></div>
+          </form>
+        </section>
+      </div>}
       {showForm && (
         <div className="preview-modal">
           <section className="preview-modal__body" role="dialog" aria-modal="true" aria-labelledby="add-product-title">

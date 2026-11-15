@@ -98,6 +98,7 @@ export interface InventoryProduct {
   reorder: number;
   centralStock: number;
   inTransitStock: number;
+  allocatedStock?: number;
   averageUnitCost?: number;
   imagePath: string | null;
   departmentId: string | null;
